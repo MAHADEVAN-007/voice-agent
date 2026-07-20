@@ -180,7 +180,7 @@ async def entrypoint(ctx: JobContext):
             turn_detection=inference.TurnDetector(),
             preemptive_generation={"enabled": True},
         ),
-        min_endpointing_delay=1.0,
+        min_endpointing_delay=0.25,
     )
 
     usage_collector = metrics.UsageCollector()
@@ -237,22 +237,26 @@ async def entrypoint(ctx: JobContext):
                 break
 
 
-    await session.start(
-        agent=Assistant(phone_number=phone_number),
-        room=ctx.room,
-        record=True,
-        room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                noise_cancellation=noise_cancellation.BVC(),
+    room_name = ctx.room.name
+    try:
+        await session.start(
+            agent=Assistant(phone_number=phone_number),
+            room=ctx.room,
+            record=True,
+            room_options=room_io.RoomOptions(
+                audio_input=room_io.AudioInputOptions(),
+                delete_room_on_close=True,
             )
         )
-    )
-            
+    except Exception:
+        logger.exception("Agent session failed - see traceback above")
+        raise
+    finally:
+        await log_usage()
+
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     agents.cli.run_app(server)
-
-
-
 

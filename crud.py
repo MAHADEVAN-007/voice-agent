@@ -43,7 +43,7 @@ def devanagari_to_latin(text: str) -> str:
             result.append(DEVANAGARI_TO_LATIN.get(char, ""))
         else:
             result.append(char)
-    
+
     return ''.join(result).strip()
 
 def clean_query(query: str) -> str:
@@ -207,4 +207,3 @@ async def deduct_stock(db: AsyncSession,items: list[dict]) -> dict:
 
 
 
-        

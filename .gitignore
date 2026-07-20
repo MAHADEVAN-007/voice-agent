@@ -45,3 +45,14 @@ updates/
 KMS/
 opencode.txt
 logs.txt
+PROJECT_DEEP_DIVE.md
+logs_md.md
+prompts/
+frontend/node_modules/
+frontend/dist/
+.opencode/
+.impeccable/
+PRODUCT.md
+frontend/vite-error.txt
+frontend/vite-output.txt
+

@@ -161,7 +161,7 @@ async def entrypoint(ctx: JobContext):
             flush_signal=True,
         ),
         llm=GroqLLM(
-            model='llama-3.3-70b-vertatile',
+            model='llama-3.3-70b-versatile',
         ),
         tts=sarvam.TTS( 
             target_language_code='hi-IN',

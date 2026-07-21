@@ -171,6 +171,7 @@ async def entrypoint(ctx: JobContext):
 
     # Configure the voice `pipeline with STT, LLM, TTS, and VAD providers
     session = AgentSession(
+        turn_detection="stt",
         stt=sarvam.STT(
             language="hi-IN",
             model='saaras:v3',

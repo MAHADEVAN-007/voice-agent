@@ -179,7 +179,7 @@ async def entrypoint(ctx: JobContext):
             high_vad_sensitivity=True,
             flush_signal=True,
         ),
-        llm=inference(
+        llm=inference.LLM(
             model='openai/gpt-4.1-nano'
         ),
         tts=sarvam.TTS( 

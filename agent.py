@@ -213,7 +213,6 @@ async def entrypoint(ctx: JobContext):
                 "enabled": True,
                 "mode": "adaptive",
                 "min_duration": 0.5,
-                "resume_false_interruption": True,
             },
         ),
         aec_warmup_duration=1.0,
@@ -235,8 +234,8 @@ async def entrypoint(ctx: JobContext):
 
     async def log_usage():
         # Print per-session summary (tokens, audio duration, costs)
-        summary = usage_collector.get_summary()
-        logger.info("Usage summary: %s", summary)
+        for u in usage_collector.flatten():
+            logger.info("Usage summary: %s", u)
 
     # Fire log_usage when worker shuts down
     ctx.add_shutdown_callback(log_usage)

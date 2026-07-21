@@ -200,7 +200,8 @@ async def entrypoint(ctx: JobContext):
             send_completion_event=True,
             temperature=0.1,
         ),
-        vad=silero.VAD.load(),
+        vad=None,
+        # vad=silero.VAD.load(),
         turn_handling=agents.TurnHandlingOptions(
             # turn_detection=inference.TurnDetector(),
             turn_detection="stt",

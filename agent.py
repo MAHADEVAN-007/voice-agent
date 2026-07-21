@@ -22,15 +22,14 @@ import json, re
 from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, room_io
-from livekit.plugins import noise_cancellation, sarvam, silero
+from livekit.plugins import sarvam, silero
 from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics
 from livekit.agents import function_tool, RunContext
 from livekit.agents import inference
 
 from database import session_scope, init_db
-from crud import search_products, deduct_stock, create_product, get_product_by_name
+from crud import search_products, deduct_stock, create_product
 from init_db import KIRANA_PRODUCTS
-from decimal import Decimal
 
 from sqlalchemy import text
 
@@ -181,6 +180,10 @@ async def entrypoint(ctx: JobContext):
         ),
         llm=inference.LLM(
             model="openai/gpt-4.1-mini",
+            extra_kwargs={
+                "prompt_cache_key": "voice-agent-v1",
+                "service_tier": "priority"
+            }
         ),
         tts=sarvam.TTS( 
             target_language_code='hi-IN',
@@ -198,11 +201,25 @@ async def entrypoint(ctx: JobContext):
         vad=silero.VAD.load(),
         turn_handling=agents.TurnHandlingOptions(
             turn_detection=inference.TurnDetector(),
-            preemptive_generation={"enabled": True},
+            endpointing={
+                "mode":"dynamic",
+                "max_delay":1.2,
+            },
+            preemptive_generation={
+                "enabled": True,
+                "preemptive_tts": True,
+            },
+            interruption={
+                "enabled": True,
+                "mode": "adaptive",
+                "min_duration": 0.5,
+                "resume_false_interruption": True,
+            },
         ),
+        aec_warmup_duration=1.0,
     )
 
-    usage_collector = metrics.UsageCollector()
+    usage_collector = metrics.ModelUsageCollector()
     last_eou_metrics:  metrics.EOUMetrics | None = None
 
     @session.on("metrics_collected")
@@ -277,4 +294,6 @@ async def entrypoint(ctx: JobContext):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     agents.cli.run_app(server)
+
+
 

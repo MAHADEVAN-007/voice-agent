@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel
 
-from livekit.api import AccessToken, VideoGrants, LiveKitAPI, CreateAgentDispatchRequest, CreateSIPParticipantRequest, DeleteRoomRequest
+from livekit.api import LiveKitAPI, CreateAgentDispatchRequest, CreateSIPParticipantRequest, DeleteRoomRequest
 
 from dotenv import load_dotenv
 
@@ -72,19 +72,8 @@ async def create_session(body: CreateSessionBody):
     finally:
         await session.close()
 
-    token = AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)\
-        .with_identity(f"web-user-{uuid.uuid4().hex[:8]}")\
-        .with_grants(VideoGrants(
-            room_join=True,
-            room=room_name,
-            can_publish=True,
-            can_subscribe=True,
-        )).to_jwt()
-
     return {
-        "token": token,
-        "room_name": room_name,
-        "ws_url": LIVEKIT_URL,
+        "status": "calling",
     }
 
 
@@ -100,6 +89,7 @@ if os.path.isdir(FRONTEND_DIR):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
 
 
 

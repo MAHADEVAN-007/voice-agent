@@ -25,7 +25,7 @@ function CallConnected({ token, wsUrl }: { token: string; wsUrl: string }) {
   const wasConnected = useRef(false);
 
   useEffect(() => {
-    session.start({ tracks: {} });
+    session.start({ tracks: { microphone: { enabled: true } } });
     return () => { session.end(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -1,3 +1,20 @@
+import os
+
+# Workaround: On Windows, the default aiohttp DNS resolver (via aiodns/c-ares)
+# fails with "Could not contact DNS servers". Force ThreadedResolver instead.
+# This must run before any other imports that pull in aiohttp.
+import aiohttp
+import aiohttp.connector
+import aiohttp.resolver as _r
+if not hasattr(_r, '_patched'):
+    _orig_init = aiohttp.connector.TCPConnector.__init__
+    def _patched_init(self, **kwargs):
+        if 'resolver' not in kwargs:
+            kwargs['resolver'] = _r.ThreadedResolver()
+        _orig_init(self, **kwargs)
+    aiohttp.connector.TCPConnector.__init__ = _patched_init
+    _r._patched = True
+
 import logging
 import time
 import json, re
@@ -11,7 +28,7 @@ from livekit.agents import function_tool, RunContext
 from livekit.agents import inference
 from livekit.plugins.groq import LLM as GroqLLM
 
-from database import AsyncSessionLocal, init_db
+from database import session_scope, init_db
 from crud import search_products, deduct_stock, create_product, get_product_by_name
 from init_db import KIRANA_PRODUCTS
 from decimal import Decimal
@@ -54,7 +71,7 @@ Args:
     query: The product name to search for
 """
         try:
-            async with AsyncSessionLocal() as db:
+            async with session_scope() as db:
                 items = await search_products(db, query)
                 if not items:
                     return "[]"
@@ -118,7 +135,7 @@ Args:
         
 
         try:
-            async with AsyncSessionLocal() as db:
+            async with session_scope() as db:
                 stock_result = await deduct_stock(db, items)
         except Exception as e:
             logger.exception("stock deduction failed")
@@ -141,13 +158,16 @@ server = AgentServer()
 # The entrypoint function runs when a participant joins the room
 @server.rtc_session(agent_name="agent")
 async def entrypoint(ctx: JobContext):
-    await init_db()
-    async with AsyncSessionLocal() as db:
-        existing = await db.execute(text("SELECT COUNT(*) FROM inventory"))
-        result = existing.scalar()
-        if result == 0:
-            for product, qty, mrp, ppc, schemes in KIRANA_PRODUCTS:
-                await create_product(db, product, qty, mrp, ppc, schemes)
+    try:
+        await init_db()
+        async with session_scope() as db:
+            existing = await db.execute(text("SELECT COUNT(*) FROM inventory"))
+            result = existing.scalar()
+            if result == 0:
+                for product, qty, mrp, ppc, schemes in KIRANA_PRODUCTS:
+                    await create_product(db, product, qty, mrp, ppc, schemes)
+    except Exception:
+        logger.exception("DB init failed — continuing without database")
 
 
     # Configure the voice `pipeline with STT, LLM, TTS, and VAD providers
@@ -160,8 +180,8 @@ async def entrypoint(ctx: JobContext):
             high_vad_sensitivity=True,
             flush_signal=True,
         ),
-        llm=GroqLLM(
-            model='llama-3.3-70b-versatile',
+        llm=inference.LLM(
+            model="openai/gpt-4.1-nano"
         ),
         tts=sarvam.TTS( 
             target_language_code='hi-IN',

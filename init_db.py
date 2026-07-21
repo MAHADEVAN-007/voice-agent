@@ -3,7 +3,7 @@ import asyncio
 from decimal import Decimal
 
 from crud import create_product, get_product_by_name
-from database import AsyncSessionLocal, init_db
+from database import session_scope, init_db
 
 KIRANA_PRODUCTS = [
     # === COCA-COLA (6) ===
@@ -138,7 +138,7 @@ KIRANA_PRODUCTS = [
 
 async def seed():
     await init_db()
-    async with AsyncSessionLocal() as db:
+    async with session_scope() as db:
         for product, quantity, mrp, price_per_case, schemes in KIRANA_PRODUCTS:
             existing = await get_product_by_name(db, product)
             if not existing:

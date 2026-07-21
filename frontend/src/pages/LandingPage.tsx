@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import { motion, AnimatePresence, useScroll, useSpring } from "motion/react";
@@ -72,17 +71,16 @@ const useCases = [
 
 export default function LandingPage() {
   const [phoneNumber, setPhoneNumber] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [callStatus, setCallStatus] = useState<"idle" | "calling" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigate = useNavigate();
 
   const isValid = phoneNumber && phoneNumber.length >= 10;
 
   const handleCall = async () => {
     if (!isValid) return;
-    setIsLoading(true);
-    setError("");
+    setCallStatus("calling");
+    setErrorMessage("");
     try {
       const res = await fetch("/api/create-session", {
         method: "POST",
@@ -95,12 +93,9 @@ export default function LandingPage() {
         catch { msg = (await res.text()) || msg; }
         throw new Error(msg);
       }
-      const data = await res.json();
-      navigate(`/call/${data.room_name}`, { state: { token: data.token, wsUrl: data.ws_url } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start call");
-    } finally {
-      setIsLoading(false);
+      setCallStatus("error");
+      setErrorMessage(err instanceof Error ? err.message : "Failed to start call");
     }
   };
 
@@ -247,28 +242,47 @@ export default function LandingPage() {
           >
             <div className="relative p-[1px] rounded-2xl bg-gradient-to-b from-blue-400/40 via-purple-400/30 to-blue-400/20">
               <div className="rounded-2xl bg-neutral-900/80 backdrop-blur-sm p-6 space-y-4">
-                <PhoneInput
-                  international
-                  countryCallingCodeEditable={false}
-                  defaultCountry="IN"
-                  value={phoneNumber}
-                  onChange={setPhoneNumber}
-                  className="w-full [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500 [&_.PhoneInputInput]:focus:border-blue-500/50 [&_.PhoneInputInput]:focus:outline-none"
-                />
+                {callStatus === "calling" ? (
+                  <div className="text-center space-y-4 py-4">
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                      className="w-16 h-16 rounded-full bg-green-600/20 flex items-center justify-center mx-auto"
+                    >
+                      <Phone className="w-7 h-7 text-green-400" />
+                    </motion.div>
+                    <p className="text-lg font-semibold text-white">Calling your number...</p>
+                    <p className="text-neutral-400 text-sm">Please pick up the call</p>
+                    <button
+                      onClick={() => setCallStatus("idle")}
+                      className="text-neutral-500 text-sm hover:text-white transition-colors underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <PhoneInput
+                      international
+                      countryCallingCodeEditable={false}
+                      defaultCountry="IN"
+                      value={phoneNumber}
+                      onChange={setPhoneNumber}
+                      className="w-full [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500 [&_.PhoneInputInput]:focus:border-blue-500/50 [&_.PhoneInputInput]:focus:outline-none"
+                    />
 
-                {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{error}</motion.p>}
+                    {callStatus === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{errorMessage}</motion.p>}
 
-                <button
-                  onClick={handleCall}
-                  disabled={!isValid || isLoading}
-                  className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid || isLoading ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
-                >
-                  <motion.span animate={isLoading ? { rotate: 360 } : {}} transition={isLoading ? { repeat: Number.POSITIVE_INFINITY, duration: 1, ease: "linear" } : {}}>
-                    <Phone className="w-5 h-5" />
-                  </motion.span>
-                  {isLoading ? "Connecting..." : "Call Agent"}
-                </button>
-
+                    <button
+                      onClick={handleCall}
+                      disabled={!isValid}
+                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
+                    >
+                      <Phone className="w-5 h-5" />
+                      Call Agent
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

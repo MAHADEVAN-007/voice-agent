@@ -171,7 +171,6 @@ async def entrypoint(ctx: JobContext):
 
     # Configure the voice `pipeline with STT, LLM, TTS, and VAD providers
     session = AgentSession(
-        turn_detection="stt",
         stt=sarvam.STT(
             language="hi-IN",
             model='saaras:v3',
@@ -181,7 +180,7 @@ async def entrypoint(ctx: JobContext):
             flush_signal=True,
         ),
         llm=inference.LLM(
-            model="openai/gpt-4.1-mini",
+            model="openai/gpt-4.1-nano",
             extra_kwargs={
                 "prompt_cache_key": "voice-agent-v1",
                 "service_tier": "priority"
@@ -192,10 +191,10 @@ async def entrypoint(ctx: JobContext):
             model='bulbul:v3',
             speaker='shubh',
             speech_sample_rate=22050,
-            pace=1.15,
+            pace=1.25,
             output_audio_bitrate="128k",
             output_audio_codec='mp3',
-            min_buffer_size=50,
+            min_buffer_size=30,
             max_chunk_length=150,
             enable_preprocessing=True,
             send_completion_event=True,
@@ -203,7 +202,8 @@ async def entrypoint(ctx: JobContext):
         ),
         vad=silero.VAD.load(),
         turn_handling=agents.TurnHandlingOptions(
-            turn_detection=inference.TurnDetector(),
+            # turn_detection=inference.TurnDetector(),
+            turn_detection="stt",
             preemptive_generation={
                 "enabled": True,
             },

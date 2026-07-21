@@ -205,8 +205,10 @@ async def entrypoint(ctx: JobContext):
         turn_handling=agents.TurnHandlingOptions(
             # turn_detection=inference.TurnDetector(),
             turn_detection="stt",
+            endpointing={"min_delay": 0},
             preemptive_generation={
                 "enabled": True,
+                "preemptive_tts": True,
             },
         ),
     )

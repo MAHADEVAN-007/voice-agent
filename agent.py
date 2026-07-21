@@ -196,12 +196,13 @@ async def entrypoint(ctx: JobContext):
             output_audio_codec='mp3',
             min_buffer_size=50,
             max_chunk_length=150,
+            enable_preprocessing=True,
             send_completion_event=True,
             temperature=0.1,
         ),
         vad=silero.VAD.load(),
         turn_handling=agents.TurnHandlingOptions(
-            # turn_detection=inference.TurnDetector(),
+            turn_detection=inference.TurnDetector(),
             preemptive_generation={
                 "enabled": True,
             },

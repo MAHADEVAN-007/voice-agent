@@ -180,7 +180,7 @@ async def entrypoint(ctx: JobContext):
             flush_signal=True,
         ),
         llm=inference.LLM(
-            model='openai/gpt-4.1-nano'
+            model="openai/gpt-4.1-mini",
         ),
         tts=sarvam.TTS( 
             target_language_code='hi-IN',
@@ -200,7 +200,6 @@ async def entrypoint(ctx: JobContext):
             turn_detection=inference.TurnDetector(),
             preemptive_generation={"enabled": True},
         ),
-        min_endpointing_delay=0.25,
     )
 
     usage_collector = metrics.UsageCollector()

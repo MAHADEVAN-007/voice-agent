@@ -6,7 +6,7 @@ from aiohttp.resolver import AsyncResolver
 from dotenv import load_dotenv
 from livekit import api
 
-load_dotenv()
+load_dotenv(override=True)
 
 async def call_number(phone_number: str):
 

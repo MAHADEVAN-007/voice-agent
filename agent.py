@@ -201,21 +201,10 @@ async def entrypoint(ctx: JobContext):
         vad=silero.VAD.load(),
         turn_handling=agents.TurnHandlingOptions(
             turn_detection=inference.TurnDetector(),
-            endpointing={
-                "mode":"dynamic",
-                "max_delay":1.2,
-            },
             preemptive_generation={
                 "enabled": True,
-                "preemptive_tts": True,
-            },
-            interruption={
-                "enabled": True,
-                "mode": "adaptive",
-                "min_duration": 0.5,
             },
         ),
-        aec_warmup_duration=1.0,
     )
 
     usage_collector = metrics.ModelUsageCollector()

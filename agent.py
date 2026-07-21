@@ -26,7 +26,6 @@ from livekit.plugins import noise_cancellation, sarvam, silero
 from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics
 from livekit.agents import function_tool, RunContext
 from livekit.agents import inference
-from livekit.plugins.groq import LLM as GroqLLM
 
 from database import session_scope, init_db
 from crud import search_products, deduct_stock, create_product, get_product_by_name
@@ -180,8 +179,8 @@ async def entrypoint(ctx: JobContext):
             high_vad_sensitivity=True,
             flush_signal=True,
         ),
-        llm=GroqLLM(
-            model="llama-3.3-70b-versatile"
+        llm=inference(
+            model='openai/gpt-4.1-nano'
         ),
         tts=sarvam.TTS( 
             target_language_code='hi-IN',

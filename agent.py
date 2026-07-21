@@ -265,7 +265,6 @@ async def entrypoint(ctx: JobContext):
             record=True,
             room_options=room_io.RoomOptions(
                 audio_input=room_io.AudioInputOptions(),
-                delete_room_on_close=True,
             )
         )
     except Exception:

@@ -21,9 +21,10 @@ import json, re
 
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import Agent, AgentServer, AgentSession, JobContext, room_io
 from livekit.plugins import sarvam, silero
-from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics
+from livekit.agents import Agent, AgentServer, AgentSession, JobContext, room_io
+from livekit.plugins import noise_cancellation, sarvam, silero
+from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics, SessionUsageUpdatedEvent
 from livekit.agents import function_tool, RunContext
 from livekit.agents import inference
 
@@ -207,35 +208,47 @@ async def entrypoint(ctx: JobContext):
         ),
     )
 
-    usage_collector = metrics.ModelUsageCollector()
-    last_eou_metrics:  metrics.EOUMetrics | None = None
+    # usage_collector = metrics.UsageCollector()
+    # last_eou_metrics:  metrics.EOUMetrics | None = None
 
-    @session.on("metrics_collected")
-    def _on_metrics_collected(ev: MetricsCollectedEvent):
-        nonlocal last_eou_metrics
-        # Capture EOU metrics for TTFA calculation
-        if ev.metrics.type == "eou_metrics":
-            last_eou_metrics = ev.metrics
+    # @session.on("metrics_collected")
+    # def _on_metrics_collected(ev: MetricsCollectedEvent):
+    #     nonlocal last_eou_metrics
+    #     # Capture EOU metrics for TTFA calculation
+    #     if ev.metrics.type == "eou_metrics":
+    #         last_eou_metrics = ev.metrics
 
-        # Log each metric as it arrives and add to usage collector
-        metrics.log_metrics(ev.metrics)
-        usage_collector.collect(ev.metrics)
+    #     # Log each metric as it arrives and add to usage collector
+    #     metrics.log_metrics(ev.metrics)
+    #     usage_collector.collect(ev.metrics)
+
+    _usage = []
+
+    @session.on("session_usage_updated")
+    def _on_usage_updated(ev: SessionUsageUpdatedEvent):
+        nonlocal _usage
+        _usage = ev.usage.model_usage
+
+    # async def log_usage():
+    #     # Print per-session summary (tokens, audio duration, costs)
+    #     summary = usage_collector.get_summary()
+    #     logger.info("Usage summary: %s", summary)
 
     async def log_usage():
-        # Print per-session summary (tokens, audio duration, costs)
-        for u in usage_collector.flatten():
-            logger.info("Usage summary: %s", u)
+        for mu in _usage:
+            logger.info("Usage: %s", mu)
 
     # Fire log_usage when worker shuts down
     ctx.add_shutdown_callback(log_usage)
 
     @session.on("agent_state_changed")
     def _on_agent_state_changed(ev: AgentStateChangedEvent):
-        if ev.new_state == "speaking":
-            if last_eou_metrics:
-            # Calculate time since user finished speaking
-                elapsed = time.time() - last_eou_metrics.timestamp
-                logger.info(f"Time to first audio: {elapsed:.3f}s")
+        pass
+        # if ev.new_state == "speaking":
+        #     if last_eou_metrics:
+        #     # Calculate time since user finished speaking
+        #         elapsed = time.time() - last_eou_metrics.timestamp
+        #         logger.info(f"Time to first audio: {elapsed:.3f}s")
 
 
     ## Try distpatch metadata first ()
@@ -269,13 +282,14 @@ async def entrypoint(ctx: JobContext):
             record=True,
             room_options=room_io.RoomOptions(
                 audio_input=room_io.AudioInputOptions(),
+                audio_output=room_io.AudioOutputOptions(),
             )
         )
     except Exception:
         logger.exception("Agent session failed - see traceback above")
         raise
-    finally:
-        await log_usage()
+    # finally:
+    #     await log_usage()
 
 
 

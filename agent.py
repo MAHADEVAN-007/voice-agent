@@ -79,6 +79,9 @@ Args:
                     schemes_list = item.schemes.split("; ") if item.schemes else None
                     product_name = re.sub(r'\b(\d+)g\b', r'\1 gram', item.product)
                     product_name = re.sub(r'\b(\d+)ml\b', r'\1 milliliter', product_name)
+                    product_name = re.sub(r'\b(\d+)kg\b', r'\1 kilogram', product_name)
+                    product_name = re.sub(r'\b(\d+)l\b', r'\1 liter', product_name)
+                    product_name = re.sub(r'\b(\d+)mg\b', r'\1 milligram', product_name)
                     result.append({
                         "product": product_name,
                         "quantity": item.quantity,

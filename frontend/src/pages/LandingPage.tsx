@@ -152,7 +152,6 @@ export default function LandingPage() {
           <div className="hidden md:flex items-center gap-8 text-sm">
             {[
               { id: "how", label: "How it Works" },
-              { id: "demo", label: "Live Demo" },
               { id: "features", label: "Features" },
               { id: "faq", label: "FAQ" },
             ].map((link) => (
@@ -172,7 +171,6 @@ export default function LandingPage() {
               <div className="flex flex-col p-4 gap-2 text-sm">
                 {[
                   { id: "how", label: "How it Works" },
-                  { id: "demo", label: "Live Demo" },
                   { id: "features", label: "Features" },
                   { id: "faq", label: "FAQ" },
                 ].map((link) => (
@@ -257,7 +255,7 @@ export default function LandingPage() {
                       onClick={() => setCallStatus("idle")}
                       className="text-neutral-500 text-sm hover:text-white transition-colors underline"
                     >
-                      Cancel
+                      Back
                     </button>
                   </div>
                 ) : (

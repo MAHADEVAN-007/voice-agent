@@ -22,6 +22,7 @@ import {
   Store,
   Truck,
 } from "lucide-react";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 
 /* ──────────────── Data ──────────────── */
 
@@ -66,13 +67,15 @@ const useCases = [
 
 
 
-
 /* ──────────────── Component ──────────────── */
 
 export default function LandingPage() {
   const [phoneNumber, setPhoneNumber] = useState<string>();
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
+  const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isValid = phoneNumber && phoneNumber.length >= 10;
@@ -85,7 +88,7 @@ export default function LandingPage() {
       const res = await fetch("/api/create-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: phoneNumber }),
+        body: JSON.stringify({ phone_number: phoneNumber, turnstile_token: turnstileToken }),
       });
       if (!res.ok) {
         let msg = `Server error: ${res.status}`;
@@ -93,6 +96,8 @@ export default function LandingPage() {
         catch { msg = (await res.text()) || msg; }
         throw new Error(msg);
       }
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
     } catch (err) {
       setCallStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "Failed to start call");
@@ -267,13 +272,15 @@ export default function LandingPage() {
                       value={phoneNumber}
                       onChange={setPhoneNumber}
                       className="w-full [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500 [&_.PhoneInputInput]:focus:border-blue-500/50 [&_.PhoneInputInput]:focus:outline-none"
-                    />
+                      />
+
+                    <Turnstile ref={turnstileRef} siteKey={TURNSTILE_SITE_KEY} onSuccess={(token) => setTurnstileToken(token)} options={{ size: "invisible" }} />
 
                     {callStatus === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{errorMessage}</motion.p>}
 
                     <button
                       onClick={handleCall}
-                      disabled={!isValid}
+                      disabled={!isValid || !turnstileToken}
                       className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
                     >
                       <Phone className="w-5 h-5" />

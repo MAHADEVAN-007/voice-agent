@@ -281,11 +281,12 @@ export default function LandingPage() {
                     <button
                       onClick={handleCall}
                       disabled={!isValid || !turnstileToken}
-                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
+                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid || !turnstileToken ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
                     >
                       <Phone className="w-5 h-5" />
                       Call Agent
                     </button>
+                    {turnstileToken === null && (<p className="text-neutral-500 text-xs text-center">Verifying browser...</p>)}
                   </>
                 )}
               </div>

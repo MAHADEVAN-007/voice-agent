@@ -77,8 +77,57 @@ export default function LandingPage() {
   const turnstileRef = useRef<TurnstileInstance>(null);
   const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [otpStep, setOtpStep] = useState<"phone" | "otp" | "verified">("phone");
+  const [otpInput, setOtpInput] = useState("");
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpError, setOtpError] = useState("");
 
   const isValid = phoneNumber && phoneNumber.length >= 10;
+
+  const handleSendOTP = async () => {
+    if (!phoneNumber || !turnstileToken) return;
+    setOtpSending(true);
+    setOtpError("");
+    try {
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: phoneNumber, turnstile_token: turnstileToken }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to send OTP");
+      }
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
+      setOtpStep("otp");
+      setOtpCountdown(60);
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : "Failed to send OTP");
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!phoneNumber || otpInput.length < 6) return;
+    setOtpError("");
+    try {
+      const res = await fetch("/api/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: phoneNumber, otp: otpInput }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Invalid OTP");
+      }
+      setOtpStep("verified");
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : "Verification failed");
+    }
+  };
 
   const handleCall = async () => {
     if (!isValid) return;
@@ -103,6 +152,12 @@ export default function LandingPage() {
       setErrorMessage(err instanceof Error ? err.message : "Failed to start call");
     }
   };
+
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const id = setInterval(() => setOtpCountdown((c) => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [otpCountdown]);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -263,8 +318,8 @@ export default function LandingPage() {
                       Back
                     </button>
                   </div>
-                ) : (
-                  <>
+                ) : otpStep === "phone" ? (
+                  <div className="space-y-4">
                     <PhoneInput
                       international
                       countryCallingCodeEditable={false}
@@ -272,7 +327,76 @@ export default function LandingPage() {
                       value={phoneNumber}
                       onChange={setPhoneNumber}
                       className="w-full [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500 [&_.PhoneInputInput]:focus:border-blue-500/50 [&_.PhoneInputInput]:focus:outline-none"
-                      />
+                    />
+
+                    <Turnstile ref={turnstileRef} siteKey={TURNSTILE_SITE_KEY} onSuccess={(token) => setTurnstileToken(token)} options={{ size: "invisible" }} />
+
+                    {otpError && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{otpError}</motion.p>}
+
+                    <button
+                      onClick={handleSendOTP}
+                      disabled={!isValid || !turnstileToken || otpSending}
+                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid || !turnstileToken || otpSending ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
+                    >
+                      {otpSending ? "Sending..." : "Send OTP"}
+                    </button>
+
+                    {turnstileToken === null && <p className="text-neutral-500 text-xs text-center">Verifying browser...</p>}
+                  </div>
+                ) : otpStep === "otp" ? (
+                  <div className="space-y-4">
+                    <p className="text-neutral-400 text-sm text-center">
+                      OTP sent to <span className="text-white font-medium">{phoneNumber}</span>
+                    </p>
+
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="Enter 6-digit OTP"
+                      value={otpInput}
+                      onChange={(e) => setOtpInput(e.target.value)}
+                      className="w-full bg-transparent border border-neutral-700 rounded-lg px-4 py-3 text-white text-center text-xl tracking-[0.5em] placeholder:text-neutral-500 focus:border-blue-500/50 focus:outline-none"
+                    />
+
+                    {otpError && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{otpError}</motion.p>}
+
+                    <button
+                      onClick={handleVerifyOTP}
+                      disabled={otpInput.length < 6}
+                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${otpInput.length < 6 ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
+                    >
+                      Verify OTP
+                    </button>
+
+                    <div className="flex items-center justify-between text-sm">
+                      {otpCountdown > 0 ? (
+                        <span className="text-neutral-500">Expires in {otpCountdown}s</span>
+                      ) : (
+                        <button onClick={() => { turnstileRef.current?.reset(); setTurnstileToken(null); handleSendOTP(); }} className="text-blue-400 hover:text-blue-300 transition-colors">
+                          Resend OTP
+                        </button>
+                      )}
+                      <button onClick={() => { setOtpStep("phone"); setOtpError(""); setOtpInput(""); }} className="text-neutral-500 hover:text-white transition-colors">
+                        Change number
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center gap-2 text-green-400 text-sm">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Phone verified</span>
+                    </div>
+
+                    <PhoneInput
+                      international
+                      countryCallingCodeEditable={false}
+                      defaultCountry="IN"
+                      value={phoneNumber}
+                      onChange={setPhoneNumber}
+                      disabled
+                      className="w-full opacity-60 [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500"
+                    />
 
                     <Turnstile ref={turnstileRef} siteKey={TURNSTILE_SITE_KEY} onSuccess={(token) => setTurnstileToken(token)} options={{ size: "invisible" }} />
 
@@ -286,8 +410,13 @@ export default function LandingPage() {
                       <Phone className="w-5 h-5" />
                       Call Agent
                     </button>
-                    {turnstileToken === null && (<p className="text-neutral-500 text-xs text-center">Verifying browser...</p>)}
-                  </>
+
+                    {turnstileToken === null && <p className="text-neutral-500 text-xs text-center">Verifying browser...</p>}
+
+                    <button onClick={() => { setOtpStep("phone"); setOtpInput(""); setOtpError(""); setTurnstileToken(null); turnstileRef.current?.reset(); }} className="text-neutral-500 text-sm hover:text-white transition-colors underline text-center w-full">
+                      Start over
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

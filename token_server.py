@@ -1,7 +1,7 @@
-import os, json, uuid, uvicorn, logging
+import os, json, uuid, uvicorn, logging, random, string, time
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -10,6 +10,11 @@ from pydantic import BaseModel
 from livekit.api import LiveKitAPI, CreateAgentDispatchRequest, CreateSIPParticipantRequest, DeleteRoomRequest
 
 from dotenv import load_dotenv
+
+try:
+    from otp import send_otp_sms
+except ImportError:
+    send_otp_sms = None
 
 load_dotenv()
 
@@ -36,15 +41,75 @@ TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY")
 # Rate limiting — in-memory call log (resets on restart)
 call_log: dict[str, list[datetime]] = {}
 
+# OTP ->
+otp_store: dict[str, dict] = {}
+verified_numbers: set[str] = set()
+
 class CreateSessionBody(BaseModel):
     phone_number: str
     turnstile_token: str
+
+class SendOTPBody(BaseModel):
+    phone_number: str
+    turnstile_token: str
+
+class VerifyOTPBody(SendOTPBody):
+    otp: str
+
+def generate_otp() -> str:
+    chars = string.ascii_letters + string.digits + "@#$%&*"
+    return "".join(random.choices(chars, k=6))
+
+
+# Send OTP ->
+@app.post("/api/send-otp")
+async def send_otp(body: SendOTPBody):
+    if not await verify_turnstile(body.turnstile_token):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification failed. Please refresh and try again.")
+    
+    if not body.phone_number:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number is required")
+
+    otp_code = generate_otp()
+    otp_store[body.phone_number] = {"otp_code":otp_code, "expires":time.time()+60}
+
+    if not callable(send_otp_sms) or not send_otp_sms(body.phone_number, otp_code):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to send OTP. Try Again.")
+
+    return {"success": True}
+
+
+# Verify OTP ->
+@app.post("/api/verify-otp")
+async def verify_otp(body: VerifyOTPBody):
+    entry = otp_store.get(body.phone_number)
+
+    # No OTP requested ->
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No OTP requested. Click Send OTP first.")
+
+    # If time exceeds then 1 min, OTP expires ->
+    if time.time() > entry["expires"]:
+        del otp_store[body.phone_number]
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OTP Expired. Request a new OTP.")
+
+    # If entered_otp != otp ->
+    if entry['otp_code'] != body.otp:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP. Try Again.")
+
+
+    del otp_store[body.phone_number]
+    verified_numbers.add(body.phone_number)
+    return {"verified": True}
 
 
 @app.post("/api/create-session")
 async def create_session(body: CreateSessionBody, request: Request):
     if not body.phone_number:
         raise HTTPException(status_code=400, detail="Phone number is required")
+
+    if body.phone_number not in verified_numbers:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Please verify your phone number first with OTP.")
 
     if not await verify_turnstile(body.turnstile_token):
         raise HTTPException(status_code=403, detail="Verification failed. Please refresh and try again.")
@@ -53,6 +118,8 @@ async def create_session(body: CreateSessionBody, request: Request):
     if is_rate_limited(body.phone_number, client_ip):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait before trying again.")
 
+    verified_numbers.discard(body.phone_number)
+    
     room_name = f"web-{uuid.uuid4().hex[:12]}"
 
     resolver = AsyncResolver(nameservers=["1.1.1.1", "8.8.8.8"])

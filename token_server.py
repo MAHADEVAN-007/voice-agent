@@ -38,12 +38,6 @@ LIVEKIT_API_SECRET = os.environ['LIVEKIT_API_SECRET']
 LIVEKIT_OUTBOUND_TRUNK_ID = os.environ['LIVEKIT_OUTBOUND_TRUNK_ID']
 TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY")
 
-# Rate limiting — in-memory call log (resets on restart)
-call_log: dict[str, list[datetime]] = {}
-
-# OTP ->
-otp_store: dict[str, dict] = {}
-verified_numbers: set[str] = set()
 
 class CreateSessionBody(BaseModel):
     phone_number: str
@@ -61,6 +55,10 @@ def generate_otp() -> str:
     chars = string.ascii_letters + string.digits + "@#$%&*"
     return "".join(random.choices(chars, k=6))
 
+
+# OTP ->
+otp_store: dict[str, dict] = {}
+verified_numbers: set[str] = set()
 
 # Send OTP ->
 @app.post("/api/send-otp")
@@ -108,17 +106,17 @@ async def verify_otp(body: VerifyOTPBody):
 @app.post("/api/create-session")
 async def create_session(body: CreateSessionBody, request: Request):
     if not body.phone_number:
-        raise HTTPException(status_code=400, detail="Phone number is required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number is required")
 
     if body.phone_number not in verified_numbers:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Please verify your phone number first with OTP.")
 
     if not await verify_turnstile(body.turnstile_token):
-        raise HTTPException(status_code=403, detail="Verification failed. Please refresh and try again.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification failed. Please refresh and try again.")
 
     client_ip = get_client_ip(request)
     if is_rate_limited(body.phone_number, client_ip):
-        raise HTTPException(status_code=429, detail="Too many requests. Please wait before trying again.")
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests. Please wait before trying again.")
 
     verified_numbers.discard(body.phone_number)
 
@@ -169,13 +167,18 @@ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", 'dist')
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name='frontend')
 
-
+# Get IP Address of the User ->
 def get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host
 
+
+# Rate limiting — in-memory call log (resets on restart)
+call_log: dict[str, list[datetime]] = {}
+
+# Rate Limiting Implementation ->
 def is_rate_limited(phone: str, ip: str) -> bool:
     now = datetime.utcnow()
     for key in list(call_log.keys()):
@@ -185,15 +188,21 @@ def is_rate_limited(phone: str, ip: str) -> bool:
             call_log[key] = [t for t in call_log[key] if now - t < timedelta(hours=1)]
         if not call_log[key]:
             del call_log[key]
+
+    # Checks phone limit ->
     phone_key = f"phone:{phone}"
     if len(call_log.get(phone_key, [])) >= 2:
-        return True
+        return True # User has hit the max rate limit. Denied to call the agent!!
+
+    # Check IP limit ->
     ip_key = f"ip:{ip}"
     if len(call_log.get(ip_key, [])) >= 5:
-        return True
+        return True # User has hit the max rate limit. Denied to call the agent!!
+    
     call_log.setdefault(phone_key, []).append(now)
     call_log.setdefault(ip_key, []).append(now)
-    return False
+
+    return False # User has not hit the max rate limit. Allowed to call the agent!!
 
 async def verify_turnstile(token: str) -> bool:
     if not TURNSTILE_SECRET_KEY:

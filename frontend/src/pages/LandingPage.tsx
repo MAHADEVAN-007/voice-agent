@@ -154,6 +154,14 @@ export default function LandingPage() {
   };
 
   useEffect(() => {
+    const id = setInterval(() => {
+      turnstileRef.current?.reset():
+      setTurnstileToken(null);
+    }, 120000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     if (otpCountdown <= 0) return;
     const id = setInterval(() => setOtpCountdown((c) => c - 1), 1000);
     return () => clearInterval(id);

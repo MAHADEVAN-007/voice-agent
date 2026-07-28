@@ -155,7 +155,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     const id = setInterval(() => {
-      turnstileRef.current?.reset():
+      turnstileRef.current?.reset();
       setTurnstileToken(null);
     }, 120000);
     return () => clearInterval(id);

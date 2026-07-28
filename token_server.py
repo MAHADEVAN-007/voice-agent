@@ -65,11 +65,12 @@ def generate_otp() -> str:
 # Send OTP ->
 @app.post("/api/send-otp")
 async def send_otp(body: SendOTPBody):
-    if not await verify_turnstile(body.turnstile_token):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification failed. Please refresh and try again.")
-    
+
     if not body.phone_number:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number is required")
+    
+    if not await verify_turnstile(body.turnstile_token):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification failed. Please refresh and try again.")
 
     otp_code = generate_otp()
     otp_store[body.phone_number] = {"otp_code":otp_code, "expires":time.time()+60}

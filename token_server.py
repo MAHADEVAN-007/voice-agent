@@ -53,7 +53,8 @@ class SendOTPBody(BaseModel):
     phone_number: str
     turnstile_token: str
 
-class VerifyOTPBody(SendOTPBody):
+class VerifyOTPBody(BaseModel):
+    phone_number: str
     otp: str
 
 def generate_otp() -> str:
@@ -119,7 +120,7 @@ async def create_session(body: CreateSessionBody, request: Request):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait before trying again.")
 
     verified_numbers.discard(body.phone_number)
-    
+
     room_name = f"web-{uuid.uuid4().hex[:12]}"
 
     resolver = AsyncResolver(nameservers=["1.1.1.1", "8.8.8.8"])

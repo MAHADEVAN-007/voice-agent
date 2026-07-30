@@ -76,6 +76,7 @@ export default function LandingPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(null);
+  const resendPending = useRef(false);
   const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [otpStep, setOtpStep] = useState<"phone" | "otp" | "verified">("phone");
@@ -88,15 +89,16 @@ export default function LandingPage() {
 
   const isValid = phoneNumber && phoneNumber.length >= 10;
 
-  const handleSendOTP = async () => {
-    if (!phoneNumber || !turnstileToken) return;
+  const handleSendOTP = async (overrideToken?: string) => {
+    const token = overrideToken || turnstileToken;
+    if (!phoneNumber || !token) return;
     setOtpSending(true);
     setOtpError("");
     try {
       const res = await fetch("/api/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: phoneNumber, turnstile_token: turnstileToken }),
+        body: JSON.stringify({ phone_number: phoneNumber, turnstile_token: token }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -457,7 +459,7 @@ export default function LandingPage() {
                           <CheckCircle2 className="w-4 h-4" />
                           <span>Access Approved!</span>
                         </div>
-                        <button onClick={handleSendOTP}
+                        <button onClick={() => handleSendOTP()}
                           disabled={!isValid || otpSending}
                           className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid || otpSending ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}>
                           {otpSending ? "Sending..." : "Send OTP"}
@@ -496,7 +498,7 @@ export default function LandingPage() {
                       {otpCountdown > 0 ? (
                         <span className="text-neutral-500">Expires in {otpCountdown}s</span>
                       ) : (
-                        <button onClick={() => { turnstileRef.current?.reset(); setTurnstileToken(null); handleSendOTP(); }} className="text-blue-400 hover:text-blue-300 transition-colors">
+                        <button onClick={() => { turnstileRef.current?.reset(); setTurnstileToken(null); resendPending.current = true; }} className="text-blue-400 hover:text-blue-300 transition-colors">
                           Resend OTP
                         </button>
                       )}
@@ -504,6 +506,19 @@ export default function LandingPage() {
                         Change number
                       </button>
                     </div>
+
+                    <Turnstile
+                      ref={turnstileRef}
+                      siteKey={TURNSTILE_SITE_KEY}
+                      onSuccess={(token) => {
+                        setTurnstileToken(token);
+                        if (resendPending.current) {
+                          resendPending.current = false;
+                          handleSendOTP(token);
+                        }
+                      }}
+                      options={{ theme: "dark" }}
+                    />
                   </div>
                 ) : (
                   <div className="space-y-4">

@@ -252,7 +252,7 @@ async def get_request_status(request_id: str):
 @app.get("/api/admin/list-requests")
 async def list_requests(request_id: str = ""):
     record = access_requests.get(request_id)
-    if not record or record['status'] != "pending":
+    if not record:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired request")
     return {"requests": [record]}
 

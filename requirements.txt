@@ -9,3 +9,4 @@ sqlalchemy>=2.0.51
 twilio>=9.10.9
 uvicorn[standard]>=0.34.0
 resend>=0.8.0
+aiohttp>=3.9.0

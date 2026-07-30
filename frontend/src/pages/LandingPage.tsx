@@ -83,11 +83,12 @@ export default function LandingPage() {
   const [otpInput, setOtpInput] = useState("");
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpError, setOtpError] = useState("");
   const [approvalStep, setApprovalStep] = useState<"idle" | "requesting" | "pending" | "approved" | "rejected" | "error">("idle");
   const [approvalRequestId, setApprovalRequestId] = useState<string | null>(null);
 
-  const isValid = phoneNumber && phoneNumber.length >= 10;
+  const isValid = !!phoneNumber && phoneNumber.length >= 10;
 
   const handleSendOTP = async (overrideToken?: string) => {
     const token = overrideToken || turnstileToken;
@@ -110,13 +111,16 @@ export default function LandingPage() {
       setOtpCountdown(60);
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : "Failed to send OTP");
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
     } finally {
       setOtpSending(false);
     }
   };
 
   const handleVerifyOTP = async () => {
-    if (!phoneNumber || otpInput.length < 6) return;
+    if (!phoneNumber || otpInput.length < 6 || otpVerifying) return;
+    setOtpVerifying(true);
     setOtpError("");
     try {
       const res = await fetch("/api/verify-otp", {
@@ -131,11 +135,19 @@ export default function LandingPage() {
       setOtpStep("verified");
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setOtpVerifying(false);
     }
   };
 
   const handleCall = async () => {
     if (!isValid) return;
+    if (!turnstileToken) {
+      setErrorMessage("Please complete the security check first");
+      turnstileRef.current?.reset();
+      return;
+    }
+
     setCallStatus("calling");
     setErrorMessage("");
     try {
@@ -183,23 +195,26 @@ export default function LandingPage() {
   // Polling for approval status
   useEffect(() => {
     if (approvalStep !== "pending" || !approvalRequestId) return;
-    const id = setInterval(async () => {
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
       try {
         const res = await fetch(`/api/request-status/${approvalRequestId}`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.status === "approved") {
           setApprovalStep("approved");
-          clearInterval(id);
         } else if (data.status === "rejected") {
           setApprovalStep("rejected");
-          clearInterval(id);
+        } else if (!cancelled) {
+          setTimeout(poll, 3000);
         }
       } catch {
-        // ignore network errors during polling
+        if (!cancelled) setTimeout(poll, 3000);
       }
-    }, 3000);
-    return () => clearInterval(id);
+    };
+    poll();
+    return () => { cancelled = true; };
   }, [approvalStep, approvalRequestId]);
 
   useEffect(() => {
@@ -209,13 +224,13 @@ export default function LandingPage() {
     }
   }, [approvalStep]);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      turnstileRef.current?.reset();
-      setTurnstileToken(null);
-    }, 120000);
-    return () => clearInterval(id);
-  }, []);
+  // useEffect(() => {
+  //   const id = setInterval(() => {
+  //     turnstileRef.current?.reset();
+  //     setTurnstileToken(null);
+  //   }, 120000);
+  //   return () => clearInterval(id);
+  // }, []);
 
   useEffect(() => {
     if (otpCountdown <= 0) return;
@@ -393,7 +408,7 @@ export default function LandingPage() {
                       className="w-full [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500 [&_.PhoneInputInput]:focus:border-blue-500/50 [&_.PhoneInputInput]:focus:outline-none"
                     />
 
-                    <Turnstile
+                    <Turnstile key="ts-phone"
                       ref={turnstileRef}
                       siteKey={TURNSTILE_SITE_KEY}
                       onSuccess={(token) => setTurnstileToken(token)}
@@ -488,10 +503,10 @@ export default function LandingPage() {
 
                     <button
                       onClick={handleVerifyOTP}
-                      disabled={otpInput.length < 6}
-                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${otpInput.length < 6 ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
+                      disabled={otpInput.length < 6 || otpVerifying}
+                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${otpInput.length < 6 || otpVerifying ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
                     >
-                      Verify OTP
+                      {otpVerifying ? "Verifying..." : "Verify OTP"}
                     </button>
 
                     <div className="flex items-center justify-between text-sm">
@@ -507,7 +522,7 @@ export default function LandingPage() {
                       </button>
                     </div>
 
-                    <Turnstile
+                    <Turnstile key="ts-otp"
                       ref={turnstileRef}
                       siteKey={TURNSTILE_SITE_KEY}
                       onSuccess={(token) => {
@@ -537,7 +552,7 @@ export default function LandingPage() {
                       className="w-full opacity-60 [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500"
                     />
 
-                    <Turnstile
+                    <Turnstile key="ts-verified"
                       ref={turnstileRef}
                       siteKey={TURNSTILE_SITE_KEY}
                       onSuccess={(token) => setTurnstileToken(token)}
@@ -578,7 +593,7 @@ export default function LandingPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1.5 }}
-          onClick={() => scrollToSection("demo")}
+          onClick={() => scrollToSection("how")}
           className="absolute bottom-6 left-1/2 -translate-x-1/2 text-neutral-600 hover:text-neutral-400 transition-colors"
         >
           <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }} className="flex flex-col items-center gap-1">
@@ -746,12 +761,7 @@ export default function LandingPage() {
                     <Accordion.Header>
                       <Accordion.Trigger className="group flex w-full items-center justify-between p-5 rounded-xl bg-neutral-900/40 border border-neutral-800/60 hover:border-blue-500/30 transition-all text-left">
                         <span className="font-medium text-sm sm:text-base pr-4">{faq.q}</span>
-                        <motion.div
-                          animate={{ rotate: i === 0 ? 0 : undefined }}
-                          transition={{ duration: 0.2 }}
-                        >
                           <ChevronDown className="w-5 h-5 text-neutral-500 shrink-0 group-data-[state=open]:rotate-180 transition-transform" />
-                        </motion.div>
                       </Accordion.Trigger>
                     </Accordion.Header>
                     <Accordion.Content className="overflow-hidden data-[state=open]:animate-accordion-slide-down data-[state=closed]:animate-accordion-slide-up">

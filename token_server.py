@@ -29,7 +29,7 @@ app = FastAPI(title="VocalKart")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://vocal-kart-voice-agent.onrender.com", "http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"]
 )
@@ -60,7 +60,6 @@ class RequestAccessBody(BaseModel):
 class AdminRespondBody(BaseModel):
     request_id: str
     action: str
-    secret: str
 
 
 def generate_otp() -> str:
@@ -109,7 +108,7 @@ async def verify_otp(body: VerifyOTPBody):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OTP Expired. Request a new OTP.")
 
     # If entered_otp != otp ->
-    if entry['otp_code'] != body.otp:
+    if entry['otp_code'].lower() != body.otp.lower():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP. Try Again.")
 
 
@@ -137,12 +136,9 @@ async def create_session(body: CreateSessionBody, request: Request):
     if access_requests[request_id]["status"] != "approved":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Approval Pending. Please wait for admin approval")
 
-    del access_requests[request_id]
-    del phone_request_index[body.phone_number]
-
-
+    
     client_ip = get_client_ip(request)
-    if is_rate_limited(body.phone_number, client_ip):
+    if await is_rate_limited(body.phone_number, client_ip):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests. Please wait before trying again.")
 
     verified_numbers.discard(body.phone_number)
@@ -180,6 +176,9 @@ async def create_session(body: CreateSessionBody, request: Request):
     finally:
         await session.close()
 
+    del access_requests[request_id]
+    del phone_request_index[body.phone_number]
+
     return {
         "status": "calling",
     }
@@ -187,6 +186,8 @@ async def create_session(body: CreateSessionBody, request: Request):
 
 access_requests: dict[str, dict] = {}
 phone_request_index: dict[str, str] = {}
+
+app.state.access_requests = access_requests
 
 @app.post("/api/request-access")
 async def request_access(body: RequestAccessBody, request: Request):
@@ -229,7 +230,7 @@ async def request_access(body: RequestAccessBody, request: Request):
                 host = f"{host}:{request.url.port}"
             base_url = f"{scheme}://{host}"
 
-        asyncio.create_task(send_admin_notification(body.phone_number, request_id, ADMIN_SECRET, base_url))
+        asyncio.create_task(send_admin_notification(body.phone_number, request_id, base_url))
     except Exception as e:
         logger.exception(f"Failed to send admin notification for {body.phone_number}: {e}")
 
@@ -251,23 +252,19 @@ async def get_request_status(request_id: str):
 
 
 @app.get("/api/admin/list-requests")
-async def list_requests(secret: str = ""):
-    if secret != ADMIN_SECRET:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin secret")
-    return {"requests": list(access_requests.values())}
+async def list_requests(request_id: str = ""):
+    record = access_requests.get(request_id)
+    if not record or record['status'] != 'pending':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired request token")
+    return {"requests": [record]}
 
 @app.post("/api/admin/respond-request")
 async def admin_respond(body: AdminRespondBody):
-    if body.secret != ADMIN_SECRET:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin secret")
+    record = access_requests.get(body.request_id)
+    if not record or record['status'] != 'pending':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired request token")
     if body.action not in ("approved", "rejected"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Action must be 'approved' or 'rejected'")
-
-    record = access_requests.get(body.request_id)
-    if not record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request NOT Found")
-    if record['status'] != 'pending':
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Request already {record['status']}")
 
     record['status'] = body.action
     record['responded_at'] = datetime.now(timezone.utc).isoformat()
@@ -295,37 +292,40 @@ def get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
-    return request.client.host
+    if request.client:
+        return request.client.host
+    return "0.0.0.0"
 
 
 # Rate limiting — in-memory call log (resets on restart)
 call_log: dict[str, list[datetime]] = {}
 
 # Rate Limiting Implementation ->
-def is_rate_limited(phone: str, ip: str) -> bool:
-    now = datetime.utcnow()
-    for key in list(call_log.keys()):
-        if key.startswith("phone:"):
-            call_log[key] = [t for t in call_log[key] if now - t < timedelta(hours=24)]
-        elif key.startswith("ip:"):
-            call_log[key] = [t for t in call_log[key] if now - t < timedelta(hours=1)]
-        if not call_log[key]:
-            del call_log[key]
+_rate_limit_lock = asyncio.Lock()
 
-    # Checks phone limit ->
-    phone_key = f"phone:{phone}"
-    if len(call_log.get(phone_key, [])) >= 2:
-        return True # User has hit the max rate limit. Denied to call the agent!!
+async def is_rate_limited(phone: str, ip: str) -> bool:
+    async with _rate_limit_lock:
+        now = datetime.utcnow()
+        for key in list(call_log.keys()):
+            if key.startswith("phone:"):
+                call_log[key] = [t for t in call_log[key] if now - t < timedelta(hours=24)]
+            elif key.startswith("ip:"):
+                call_log[key] = [t for t in call_log[key] if now - t < timedelta(hours=1)]
+            if not call_log[key]:
+                del call_log[key]
 
-    # Check IP limit ->
-    ip_key = f"ip:{ip}"
-    if len(call_log.get(ip_key, [])) >= 5:
-        return True # User has hit the max rate limit. Denied to call the agent!!
-    
-    call_log.setdefault(phone_key, []).append(now)
-    call_log.setdefault(ip_key, []).append(now)
+        phone_key = f"phone:{phone}"
+        if len(call_log.get(phone_key, [])) >= 2:
+            return True
 
-    return False # User has not hit the max rate limit. Allowed to call the agent!!
+        ip_key = f"ip:{ip}"
+        if len(call_log.get(ip_key, [])) >= 5:
+            return True
+
+        call_log.setdefault(phone_key, []).append(now)
+        call_log.setdefault(ip_key, []).append(now)
+
+        return False  # User has not hit the max rate limit. Allowed to call the agent!!
 
 async def verify_turnstile(token: str | None) -> bool:
     if not TURNSTILE_SECRET_KEY or not token:

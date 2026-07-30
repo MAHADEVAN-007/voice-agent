@@ -200,6 +200,12 @@ export default function LandingPage() {
     return () => clearInterval(id);
   }, [approvalStep, approvalRequestId]);
 
+  useEffect(() => {
+    if (approvalStep === "approved") {
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
+    }
+  }, [approvalStep]);
 
   useEffect(() => {
     const id = setInterval(() => {

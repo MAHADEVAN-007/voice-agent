@@ -114,50 +114,47 @@ async def admin_panel(request: Request):
     return HTMLResponse(html)
 
 
-"""
 
-Imports & Router Setup (Lines 1-7)
-import os
-Reads ADMIN_SECRET from environment variables for authentication.
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
-from fastapi import HTTPException, status
-- APIRouter — a mini-app that can be mounted into the main FastAPI app (registered in token_server.py)
-- Request — gives access to incoming HTTP request data (query params, headers, etc.)
-- HTMLResponse — tells FastAPI to return raw HTML instead of JSON
-- HTTPException / status — for returning proper HTTP error codes
-router = APIRouter()
-Creates the router instance. All endpoints defined with @router.get(...) will be included when token_server.py does app.include_router(admin_router).
-Config (Line 9)
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "vocalKart-admin-secret-2492")
-Reads the secret from .env. Falls back to a default if not set — so the admin panel still works without configuration (though you should change it for security).
-HTML Template (Line 11)
-ADMIN_HTML = ""  # Will be filled with the full HTML later
-Currently empty placeholder. You'll put the complete admin panel UI here.
-The Route (Lines 13-19)
-@router.get("/admin", response_class=HTMLResponse)
-- @router.get(...) — registers this function to handle GET /admin requests
-- response_class=HTMLResponse — tells FastAPI to return this as HTML (not JSON)
-async def admin_panel(request: Request):
-Takes the incoming request object to read query parameters.
-    secret = request.query_params.get("secret", "")
-Reads the ?secret= from the URL. For example: https://vocalkart.com/admin?secret=vocalKart-admin-secret-2492
-    if secret != ADMIN_SECRET:
-        return HTMLResponse("<h1>401 Unauthorized</h1><p>Invalid admin secret.</p>", status_code=status.HTTP_401_UNAUTHORIZED)
-Authentication gate — if the secret in the URL doesn't match ADMIN_SECRET from .env, return a 401 error page. This ensures only someone who knows the secret can access the admin panel.
-    html = ADMIN_HTML.replace("__ADMIN_SECRET__", secret)
+# Imports & Router Setup (Lines 1-7)
+# import os
+# Reads ADMIN_SECRET from environment variables for authentication.
+# from fastapi import APIRouter, Request
+# from fastapi.responses import HTMLResponse
+# from fastapi import HTTPException, status
+# - APIRouter — a mini-app that can be mounted into the main FastAPI app (registered in token_server.py)
+# - Request — gives access to incoming HTTP request data (query params, headers, etc.)
+# - HTMLResponse — tells FastAPI to return raw HTML instead of JSON
+# - HTTPException / status — for returning proper HTTP error codes
+# router = APIRouter()
+# Creates the router instance. All endpoints defined with @router.get(...) will be included when token_server.py does app.include_router(admin_router).
+# Config (Line 9)
+# ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "vocalKart-admin-secret-2492")
+# Reads the secret from .env. Falls back to a default if not set — so the admin panel still works without configuration (though you should change it for security).
+# HTML Template (Line 11)
+# ADMIN_HTML = ""  # Will be filled with the full HTML later
+# Currently empty placeholder. You'll put the complete admin panel UI here.
+# The Route (Lines 13-19)
+# @router.get("/admin", response_class=HTMLResponse)
+# - @router.get(...) — registers this function to handle GET /admin requests
+# - response_class=HTMLResponse — tells FastAPI to return this as HTML (not JSON)
+# async def admin_panel(request: Request):
+# Takes the incoming request object to read query parameters.
+#     secret = request.query_params.get("secret", "")
+# Reads the ?secret= from the URL. For example: https://vocalkart.com/admin?secret=vocalKart-admin-secret-2492
+#     if secret != ADMIN_SECRET:
+#         return HTMLResponse("<h1>401 Unauthorized</h1><p>Invalid admin secret.</p>", status_code=status.HTTP_401_UNAUTHORIZED)
+# Authentication gate — if the secret in the URL doesn't match ADMIN_SECRET from .env, return a 401 error page. This ensures only someone who knows the secret can access the admin panel.
+#     html = ADMIN_HTML.replace("__ADMIN_SECRET__", secret)
 
-Secret injection — replaces the __ADMIN_SECRET__ placeholder in the HTML with the actual secret value. This embeds the secret into the JavaScript so the admin panel JS can use it for subsequent API calls (like list-requests and respond-request).
-    return HTMLResponse(html)
-Returns the final HTML page to the browser.
+# Secret injection — replaces the __ADMIN_SECRET__ placeholder in the HTML with the actual secret value. This embeds the secret into the JavaScript so the admin panel JS can use it for subsequent API calls (like list-requests and respond-request).
+#     return HTMLResponse(html)
+# Returns the final HTML page to the browser.
 
-Summary: 
-The admin panel is a password-protected page.
-You visit /admin?secret=your-secret, it validates the secret, injects it into the HTML, and serves the admin UI.
-The JS in the HTML then uses that secret to make authenticated API calls to list and respond to requests.
+# Summary: 
+# The admin panel is a password-protected page.
+# You visit /admin?secret=your-secret, it validates the secret, injects it into the HTML, and serves the admin UI.
+# The JS in the HTML then uses that secret to make authenticated API calls to list and respond to requests.
 
-
-"""
 
 
 

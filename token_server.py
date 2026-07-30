@@ -85,8 +85,11 @@ async def send_otp(body: SendOTPBody):
     otp_code = generate_otp()
     otp_store[body.phone_number] = {"otp_code":otp_code, "expires":time.time()+60}
 
-    if not callable(send_otp_sms) or not send_otp_sms(body.phone_number, otp_code):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to send OTP. Try Again.")
+    if not callable(send_otp_sms):
+        raise HTTPException(status_code=503, detail="SMS service unavailable")
+    sent = await asyncio.to_thread(send_otp_sms, body.phone_number, otp_code)
+    if not sent:
+        raise HTTPException(status_code=503, detail="Failed to send OTP. Try again.")
 
     return {"success": True}
 
@@ -331,6 +334,7 @@ async def verify_turnstile(token: str | None) -> bool:
         async with session.post(
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
             data={"secret": TURNSTILE_SECRET_KEY, "response": token},
+            timeout=aiohttp.ClientTimeout(total=10),
         ) as resp:
             result = await resp.json()
             return result.get("success", False)

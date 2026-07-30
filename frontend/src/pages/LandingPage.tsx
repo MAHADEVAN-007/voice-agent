@@ -502,7 +502,7 @@ export default function LandingPage() {
                           Resend OTP
                         </button>
                       )}
-                      <button onClick={() => { setOtpStep("phone"); setOtpError(""); setOtpInput(""); setApprovalStep("idle"); }} className="text-neutral-500 hover:text-white transition-colors">
+                      <button onClick={() => { setOtpStep("phone"); setOtpError(""); setOtpInput(""); setApprovalStep("idle"); setApprovalRequestId(null); }} className="text-neutral-500 hover:text-white transition-colors">
                         Change number
                       </button>
                     </div>
@@ -547,7 +547,7 @@ export default function LandingPage() {
                     {callStatus === "error" ? (
                       <div className="space-y-3">
                         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{errorMessage}</motion.p>
-                        <button onClick={() => { setCallStatus("idle"); setErrorMessage(""); setOtpStep("phone"); setApprovalStep("idle"); }}
+                        <button onClick={() => { setCallStatus("idle"); setErrorMessage(""); setOtpStep("phone"); setApprovalStep("idle"); setApprovalRequestId(null); }}
                           className="group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110">
                           <RefreshCcw className="w-5 h-5" />
                           Start New Session
@@ -561,7 +561,7 @@ export default function LandingPage() {
                           Call Agent
                         </button>
 
-                        <button onClick={() => { setOtpStep("phone"); setOtpInput(""); setOtpError(""); setTurnstileToken(null); turnstileRef.current?.reset(); setApprovalStep("idle"); }}
+                        <button onClick={() => { setOtpStep("phone"); setOtpInput(""); setOtpError(""); setTurnstileToken(null); turnstileRef.current?.reset(); setApprovalStep("idle"); setApprovalRequestId(null); }}
                           className="text-neutral-500 text-sm hover:text-white transition-colors underline text-center w-full">
                           Start over
                         </button>

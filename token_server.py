@@ -200,8 +200,6 @@ async def request_access(body: RequestAccessBody, request: Request):
 
         if existing['status'] == "pending":
             return {"request_id": existing_id, "status":"pending"}
-        if existing['status'] == "approved":
-            return {"request_id": existing_id, "status": "approved"}
 
         del access_requests[existing_id]
         del phone_request_index[body.phone_number]

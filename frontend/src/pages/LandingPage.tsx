@@ -76,7 +76,6 @@ export default function LandingPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(null);
-  const resendPending = useRef(false);
   const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [otpStep, setOtpStep] = useState<"phone" | "otp" | "verified">("phone");
@@ -91,7 +90,7 @@ export default function LandingPage() {
 
   const handleSendOTP = async (overrideToken?: string) => {
     const token = overrideToken || turnstileToken;
-    if (!phoneNumber || !token) return;
+    if (!phoneNumber) return;
     setOtpSending(true);
     setOtpError("");
     try {
@@ -512,10 +511,6 @@ export default function LandingPage() {
                       siteKey={TURNSTILE_SITE_KEY}
                       onSuccess={(token) => {
                         setTurnstileToken(token);
-                        if (resendPending.current) {
-                          resendPending.current = false;
-                          handleSendOTP(token);
-                        }
                       }}
                       options={{ theme: "dark" }}
                     />

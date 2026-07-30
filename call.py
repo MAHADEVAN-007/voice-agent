@@ -1,4 +1,4 @@
-import asyncio, sys, os, time, json, uuid
+import asyncio, sys, os, time, json
 
 import socket, aiohttp
 from aiohttp.resolver import AsyncResolver
@@ -34,7 +34,7 @@ async def call_number(phone_number: str):
     else:
         print(f"Using existing trunk: {trunk_id}")
 
-    room_name = f"call-{uuid.uuid4().hex[:12]}"
+    room_name = f"call-{int(time.time())}"
     print(f"Calling {phone_number} in room {room_name}...")
 
     participant = await lk.sip.create_sip_participant(

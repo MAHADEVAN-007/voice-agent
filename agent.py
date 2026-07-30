@@ -3,7 +3,7 @@ import os
 # Workaround: On Windows, the default aiohttp DNS resolver (via aiodns/c-ares)
 # fails with "Could not contact DNS servers". Force ThreadedResolver instead.
 # This must run before any other imports that pull in aiohttp.
-import aiohttp, asyncio
+import aiohttp
 import aiohttp.connector
 import aiohttp.resolver as _r
 if not hasattr(_r, '_patched'):
@@ -21,14 +21,15 @@ import json, re
 
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.plugins import sarvam, silero,noise_cancellation
+from livekit.plugins import sarvam, silero
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, room_io
+from livekit.plugins import noise_cancellation, sarvam, silero
 from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics, SessionUsageUpdatedEvent
 from livekit.agents import function_tool, RunContext
 from livekit.agents import inference
 
 from database import session_scope, init_db
-from crud import search_products, deduct_stock, create_product, get_product_by_name
+from crud import search_products, deduct_stock, create_product
 from init_db import KIRANA_PRODUCTS
 
 from sqlalchemy import text
@@ -124,8 +125,7 @@ Args:
         
         try:
             # Sending WhatsApp Message ->
-            whatsapp_result = await asyncio.to_thread(
-                send_order_summary_via_twilio,
+            whatsapp_result = send_order_summary_via_twilio(
                 to_phone=number,
                 customer_name=customer_name,
                 items=items,
@@ -167,9 +167,7 @@ async def entrypoint(ctx: JobContext):
             result = existing.scalar()
             if result == 0:
                 for product, qty, mrp, ppc, schemes in KIRANA_PRODUCTS:
-                    existing = await get_product_by_name(db, product)
-                    if not existing:
-                        await create_product(db, product, qty, mrp, ppc, schemes)
+                    await create_product(db, product, qty, mrp, ppc, schemes)
     except Exception:
         logger.exception("DB init failed — continuing without database")
 

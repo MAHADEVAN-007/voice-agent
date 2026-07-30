@@ -39,7 +39,7 @@ ADMIN_HTML = """<!DOCTYPE html>
 <div id="requests"></div>
 <div id="toast" class="toast"></div>
 <script>
-const REQUEST_ID="__REQUEST_ID__";
+const SECRET="__ADMIN_SECRET__";
 const DIV=document.getElementById('requests');
 const STATUS=document.getElementById('status');
 const TOAST=document.getElementById('toast');
@@ -55,7 +55,7 @@ function showToast(msg,ok){
 
 async function load(){
   try{
-    const r=await fetch('/api/admin/list-requests?request_id='+encodeURIComponent(REQUEST_ID));
+    const r=await fetch('/api/admin/list-requests?secret='+encodeURIComponent(SECRET));
     if(!r.ok){STATUS.textContent='Auth error';return}
     const data=await r.json();
     const pending=data.requests.filter(r=>r.status==='pending');
@@ -85,7 +85,7 @@ async function respond(id,action){
   try{
     const r=await fetch('/api/admin/respond-request',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({request_id:id,action})
+      body:JSON.stringify({request_id:id,action,secret:SECRET})
     });
     if(r.ok){
       showToast(action==='approved'?'Approved ✓':'Rejected ✗',true);
@@ -107,12 +107,10 @@ setInterval(load,5000);
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_panel(request: Request):
-    request_id = request.query_params.get("request_id", "")
-    ar = request.app.state.access_requests
-    record = ar.get(request_id)
-    if not record or record['status'] != 'pending':
-        return HTMLResponse("<h1>401 Unauthorized</h1><p>Invalid or expired request token.</p>", status_code=status.HTTP_401_UNAUTHORIZED)
-    html = ADMIN_HTML.replace("__REQUEST_ID__", request_id)
+    secret = request.query_params.get("secret", "")
+    if secret != ADMIN_SECRET:
+        return HTMLResponse("<h1>401 Unauthorized</h1><p>Invalid admin secret.</p>", status_code=status.HTTP_401_UNAUTHORIZED)
+    html = ADMIN_HTML.replace("__ADMIN_SECRET__", secret)
     return HTMLResponse(html)
 
 

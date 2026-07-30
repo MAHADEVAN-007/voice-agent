@@ -16,7 +16,7 @@ except:
     logger.warning("Resend NOT Configured - Email Notifications DISABLED")
 
 
-async def send_admin_notification(phone_number: str, request_id: str, base_url: str) -> bool:
+async def send_admin_notification(phone_number: str, request_id: str, admin_secret: str, base_url: str) -> bool:
     if not _resend_available:
         logger.info(f"[email] skipped (no Resend key): {phone_number} -> request {request_id}")
         return False
@@ -26,7 +26,7 @@ async def send_admin_notification(phone_number: str, request_id: str, base_url: 
         logger.warning("ADMIN Email not set - skipping email")
         return False
 
-    admin_panel_url = f"{base_url}/admin?request_id={request_id}"
+    admin_panel_url = f"{base_url}/admin?secret={admin_secret}"
 
     html_content = f"""
     <h2>New Access Request</h2>

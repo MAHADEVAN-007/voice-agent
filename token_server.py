@@ -60,7 +60,6 @@ class RequestAccessBody(BaseModel):
 class AdminRespondBody(BaseModel):
     request_id: str
     action: str
-    secret: str
 
 
 def generate_otp() -> str:
@@ -188,6 +187,8 @@ async def create_session(body: CreateSessionBody, request: Request):
 access_requests: dict[str, dict] = {}
 phone_request_index: dict[str, str] = {}
 
+app.state.access_requests = access_requests
+
 @app.post("/api/request-access")
 async def request_access(body: RequestAccessBody, request: Request):
     if not body.phone_number:
@@ -229,7 +230,7 @@ async def request_access(body: RequestAccessBody, request: Request):
                 host = f"{host}:{request.url.port}"
             base_url = f"{scheme}://{host}"
 
-        asyncio.create_task(send_admin_notification(body.phone_number, request_id, ADMIN_SECRET, base_url))
+        asyncio.create_task(send_admin_notification(body.phone_number, request_id, base_url))
     except Exception as e:
         logger.exception(f"Failed to send admin notification for {body.phone_number}: {e}")
 
@@ -251,15 +252,19 @@ async def get_request_status(request_id: str):
 
 
 @app.get("/api/admin/list-requests")
-async def list_requests(secret: str = ""):
-    if secret != ADMIN_SECRET:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin secret")
-    return {"requests": list(access_requests.values())}
+async def list_requests(request_id: str = ""):
+    record = access_requests.get(request_id)
+    if not record or record['status'] != "pending":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired request")
+    return {"requests": [record]}
 
 @app.post("/api/admin/respond-request")
 async def admin_respond(body: AdminRespondBody):
-    if body.secret != ADMIN_SECRET:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin secret")
+    record = access_requests.get(body.request_id)
+
+    if not record or record['status'] != 'pending':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired request")
+
     if body.action not in ("approved", "rejected"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Action must be 'approved' or 'rejected'")
 

@@ -477,7 +477,7 @@ export default function LandingPage() {
                     <input
                       type="text"
                       maxLength={6}
-                      placeholder="Enter OTP"
+                      placeholder="Enter 6-digit OTP"
                       value={otpInput}
                       onChange={(e) => setOtpInput(e.target.value)}
                       className="w-full bg-transparent border border-neutral-700 rounded-lg px-4 py-3 text-white text-center text-xl tracking-[0.5em] placeholder:text-neutral-500 focus:border-blue-500/50 focus:outline-none"
@@ -505,17 +505,15 @@ export default function LandingPage() {
                         Change number
                       </button>
                     </div>
-                    
-                    <div className="pointer-events-none">
-                      <Turnstile
-                        ref={turnstileRef}
-                        siteKey={TURNSTILE_SITE_KEY}
-                        onSuccess={(token) => {
-                          setTurnstileToken(token);
-                        }}
-                        options={{ theme: "dark" }}
-                      />
-                    </div>
+
+                    <Turnstile
+                      ref={turnstileRef}
+                      siteKey={TURNSTILE_SITE_KEY}
+                      onSuccess={(token) => {
+                        setTurnstileToken(token);
+                      }}
+                      options={{ theme: "dark" }}
+                    />
                   </div>
                 ) : (
                   <div className="space-y-4">

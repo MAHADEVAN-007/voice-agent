@@ -498,7 +498,7 @@ export default function LandingPage() {
                       {otpCountdown > 0 ? (
                         <span className="text-neutral-500">Expires in {otpCountdown}s</span>
                       ) : (
-                        <button onClick={() => { turnstileRef.current?.reset(); setTurnstileToken(null); resendPending.current = true; }} className="text-blue-400 hover:text-blue-300 transition-colors">
+                        <button onClick={() => { setOtpCountdown(60); handleSendOTP(); }} className="text-blue-400 hover:text-blue-300 transition-colors">
                           Resend OTP
                         </button>
                       )}

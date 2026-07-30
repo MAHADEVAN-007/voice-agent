@@ -226,3 +226,23 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* PhoneInput country select — dark theme */
+.PhoneInputCountrySelect {
+  background-color: #262626;
+  color: #e5e5e5;
+}
+
+.PhoneInputCountrySelect option {
+  background-color: #1a1a1a;
+  color: #e5e5e5;
+  padding: 4px 8px;
+}
+
+.PhoneInputCountrySelect option:checked {
+  background-color: #374151;
+}
+
+.PhoneInputCountrySelect:focus {
+  outline: none;
+}

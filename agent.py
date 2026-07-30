@@ -183,11 +183,11 @@ async def entrypoint(ctx: JobContext):
             flush_signal=True,
         ),
         llm=inference.LLM(
-            model="openai/gpt-4.1-nano",
-            extra_kwargs={
-                "prompt_cache_key": "voice-agent-v1",
-                "service_tier": "priority"
-            }
+            model="google/gemma-4-31b-it",
+            # extra_kwargs={
+            #     "prompt_cache_key": "voice-agent-v1",
+            #     "service_tier": "priority"
+            # }
         ),
         tts=sarvam.TTS( 
             target_language_code='hi-IN',

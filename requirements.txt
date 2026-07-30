@@ -8,3 +8,4 @@ python-dotenv>=1.2.2
 sqlalchemy>=2.0.51
 twilio>=9.10.9
 uvicorn[standard]>=0.34.0
+resend>=0.8.0

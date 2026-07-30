@@ -10,6 +10,7 @@ dependencies = [
     "livekit-agents[groq,mcp,sarvam,silero,turn-detector]~=1.5",
     "livekit-plugins-noise-cancellation~=0.2",
     "python-dotenv>=1.2.2",
+    "resend>=0.8.0",
     "sqlalchemy>=2.0.51",
     "twilio>=9.10.9",
     "uvicorn[standard]>=0.34.0",

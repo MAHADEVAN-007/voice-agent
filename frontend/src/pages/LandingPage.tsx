@@ -8,6 +8,7 @@ import {
   MessageSquareText,
   Warehouse,
   Languages,
+  RefreshCcw,
   Headphones,
   CheckCircle2,
   ChevronDown,
@@ -82,6 +83,8 @@ export default function LandingPage() {
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [otpSending, setOtpSending] = useState(false);
   const [otpError, setOtpError] = useState("");
+  const [approvalStep, setApprovalStep] = useState<"idle" | "requesting" | "pending" | "approved" | "rejected" | "error">("idle");
+  const [approvalRequestId, setApprovalRequestId] = useState<string | null>(null);
 
   const isValid = phoneNumber && phoneNumber.length >= 10;
 
@@ -152,6 +155,51 @@ export default function LandingPage() {
       setErrorMessage(err instanceof Error ? err.message : "Failed to start call");
     }
   };
+
+  const handleRequestAccess = async () => {
+    if (!phoneNumber) return;
+    setApprovalStep("requesting");
+    try {
+      const res = await fetch("/api/request-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: phoneNumber }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to request access");
+      }
+      const data = await res.json();
+      setApprovalRequestId(data.request_id);
+      setApprovalStep("pending");
+    } catch (err) {
+      setApprovalStep("error");
+      setErrorMessage(err instanceof Error ? err.message : "Request failed");
+    }
+  };
+
+  // Polling for approval status
+  useEffect(() => {
+    if (approvalStep !== "pending" || !approvalRequestId) return;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/request-status/${approvalRequestId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === "approved") {
+          setApprovalStep("approved");
+          clearInterval(id);
+        } else if (data.status === "rejected") {
+          setApprovalStep("rejected");
+          clearInterval(id);
+        }
+      } catch {
+        // ignore network errors during polling
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [approvalStep, approvalRequestId]);
+
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -337,19 +385,81 @@ export default function LandingPage() {
                       className="w-full [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500 [&_.PhoneInputInput]:focus:border-blue-500/50 [&_.PhoneInputInput]:focus:outline-none"
                     />
 
-                    <Turnstile ref={turnstileRef} siteKey={TURNSTILE_SITE_KEY} onSuccess={(token) => setTurnstileToken(token)} options={{ size: "invisible" }} />
+                    <Turnstile
+                      ref={turnstileRef}
+                      siteKey={TURNSTILE_SITE_KEY}
+                      onSuccess={(token) => setTurnstileToken(token)}
+                      options={{ theme: "dark" }}
+                    />
+
+                    {approvalStep === "idle" && (
+                      <button onClick={handleRequestAccess}
+                        className="group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110">
+                        <Shield className="w-5 h-5" />
+                        Request Access
+                      </button>
+                    )}
+
+                    {approvalStep === "requesting" && (
+                      <div className="text-center py-4">
+                        <motion.div animate={{ scale: [1, 1.1, 1] }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                          className="w-12 h-12 rounded-full bg-blue-600/20 flex items-center justify-center mx-auto mb-3">
+                          <Shield className="w-6 h-6 text-blue-400" />
+                        </motion.div>
+                        <p className="text-neutral-400 text-sm">Requesting access...</p>
+                      </div>
+                    )}
+
+                    {approvalStep === "pending" && (
+                      <div className="text-center space-y-3 py-4">
+                        <motion.div animate={{ scale: [1, 1.05, 1] }}
+                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                          className="w-14 h-14 rounded-full bg-yellow-600/20 flex items-center justify-center mx-auto">
+                          <Clock className="w-7 h-7 text-yellow-400" />
+                        </motion.div>
+                        <p className="text-white font-semibold">Waiting for admin approval</p>
+                        <p className="text-neutral-400 text-sm">You'll be notified automatically once approved</p>
+                      </div>
+                    )}
+
+                    {approvalStep === "rejected" && (
+                      <div className="text-center space-y-3 py-4">
+                        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm">
+                          Access denied. Please contact the admin.
+                        </motion.p>
+                        <button onClick={() => { setApprovalStep("idle"); setErrorMessage(""); }}
+                          className="text-neutral-500 text-sm hover:text-white transition-colors underline">
+                          Try again
+                        </button>
+                      </div>
+                    )}
+
+                    {approvalStep === "error" && (
+                      <>
+                        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{errorMessage}</motion.p>
+                        <button onClick={() => { setApprovalStep("idle"); setErrorMessage(""); }}
+                          className="text-neutral-500 text-sm hover:text-white transition-colors underline text-center w-full">
+                          Try again
+                        </button>
+                      </>
+                    )}
+
+                    {approvalStep === "approved" && (
+                      <div className="text-center space-y-3">
+                        <div className="flex items-center justify-center gap-2 text-green-400 text-sm">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Access Approved!</span>
+                        </div>
+                        <button onClick={handleSendOTP}
+                          disabled={!isValid || otpSending}
+                          className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid || otpSending ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}>
+                          {otpSending ? "Sending..." : "Send OTP"}
+                        </button>
+                      </div>
+                    )}
 
                     {otpError && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{otpError}</motion.p>}
-
-                    <button
-                      onClick={handleSendOTP}
-                      disabled={!isValid || !turnstileToken || otpSending}
-                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid || !turnstileToken || otpSending ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
-                    >
-                      {otpSending ? "Sending..." : "Send OTP"}
-                    </button>
-
-                    {turnstileToken === null && <p className="text-neutral-500 text-xs text-center">Verifying browser...</p>}
                   </div>
                 ) : otpStep === "otp" ? (
                   <div className="space-y-4">
@@ -384,7 +494,7 @@ export default function LandingPage() {
                           Resend OTP
                         </button>
                       )}
-                      <button onClick={() => { setOtpStep("phone"); setOtpError(""); setOtpInput(""); }} className="text-neutral-500 hover:text-white transition-colors">
+                      <button onClick={() => { setOtpStep("phone"); setOtpError(""); setOtpInput(""); setApprovalStep("idle"); }} className="text-neutral-500 hover:text-white transition-colors">
                         Change number
                       </button>
                     </div>
@@ -401,29 +511,41 @@ export default function LandingPage() {
                       countryCallingCodeEditable={false}
                       defaultCountry="IN"
                       value={phoneNumber}
-                      onChange={setPhoneNumber}
+                      onChange={() => {}}
                       disabled
-                      className="w-full opacity-60 [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500"
+                      className="w-full opacity-60 [&_.PhoneInputCountry]:bg-blue-600/15 [&_.PhoneInputCountry]:border [&_.PhoneInputCountry]:border-blue-500/30 [&_.PhoneInputCountry]:rounded-lg [&_.PhoneInputCountry]:px-2 [&_.PhoneInputCountry]:py-1.5 [&_.PhoneInputCountry]:transition-colors [&_.PhoneInputInput]:bg-transparent [&_.PhoneInputInput]:border [&_.PhoneInputInput]:border-neutral-700 [&_.PhoneInputInput]:rounded-lg [&_.PhoneInputInput]:px-4 [&_.PhoneInputInput]:py-3 [&_.PhoneInputInput]:text-white [&_.PhoneInputInput]:placeholder:text-neutral-500"
                     />
 
-                    <Turnstile ref={turnstileRef} siteKey={TURNSTILE_SITE_KEY} onSuccess={(token) => setTurnstileToken(token)} options={{ size: "invisible" }} />
+                    <Turnstile
+                      ref={turnstileRef}
+                      siteKey={TURNSTILE_SITE_KEY}
+                      onSuccess={(token) => setTurnstileToken(token)}
+                      options={{ theme: "dark" }}
+                    />
 
-                    {callStatus === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{errorMessage}</motion.p>}
+                    {callStatus === "error" ? (
+                      <div className="space-y-3">
+                        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{errorMessage}</motion.p>
+                        <button onClick={() => { setCallStatus("idle"); setErrorMessage(""); setOtpStep("phone"); setApprovalStep("idle"); }}
+                          className="group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110">
+                          <RefreshCcw className="w-5 h-5" />
+                          Start New Session
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button onClick={handleCall} disabled={!isValid}
+                          className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}>
+                          <Phone className="w-5 h-5" />
+                          Call Agent
+                        </button>
 
-                    <button
-                      onClick={handleCall}
-                      disabled={!isValid || !turnstileToken}
-                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${!isValid || !turnstileToken ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
-                    >
-                      <Phone className="w-5 h-5" />
-                      Call Agent
-                    </button>
-
-                    {turnstileToken === null && <p className="text-neutral-500 text-xs text-center">Verifying browser...</p>}
-
-                    <button onClick={() => { setOtpStep("phone"); setOtpInput(""); setOtpError(""); setTurnstileToken(null); turnstileRef.current?.reset(); }} className="text-neutral-500 text-sm hover:text-white transition-colors underline text-center w-full">
-                      Start over
-                    </button>
+                        <button onClick={() => { setOtpStep("phone"); setOtpInput(""); setOtpError(""); setTurnstileToken(null); turnstileRef.current?.reset(); setApprovalStep("idle"); }}
+                          className="text-neutral-500 text-sm hover:text-white transition-colors underline text-center w-full">
+                          Start over
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

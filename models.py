@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import uuid
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text, Numeric, Float, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -22,4 +23,13 @@ class Inventory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
+
+class AccessRequest(Base):
+    __tablename__ = "access_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    phone_number: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | approved | rejected | expired
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
+    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -126,7 +126,7 @@ export default function LandingPage() {
       const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: phoneNumber, otp: otpInput }),
+        body: JSON.stringify({ phone_number: phoneNumber, otp: otpInput.trim() }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -481,11 +481,12 @@ export default function LandingPage() {
 
                     <input
                       type="text"
+                      inputMode="numeric"
                       maxLength={6}
                       placeholder="Enter OTP"
                       value={otpInput}
-                      onChange={(e) => setOtpInput(e.target.value)}
-                      className="w-full bg-transparent border border-neutral-700 rounded-lg px-4 py-3 text-white text-center text-xl tracking-[0.5em] placeholder:text-neutral-500 focus:border-blue-500/50 focus:outline-none"
+                      onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))}
+                       className="w-full bg-transparent border border-neutral-700 rounded-lg px-4 py-3 text-white text-center text-xl tracking-[0.5em] placeholder:text-neutral-500 focus:border-blue-500/50 focus:outline-none"
                     />
 
                     {otpError && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-sm">{otpError}</motion.p>}

@@ -89,8 +89,7 @@ class AdminRespondBody(BaseModel):
 
 
 def generate_otp() -> str:
-    chars = string.ascii_letters + string.digits + "@#$%&*"
-    return "".join(random.choices(chars, k=6))
+    return f"{random.randint(0, 999999):06d}"
 
 
 # OTP ->

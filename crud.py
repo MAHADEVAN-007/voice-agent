@@ -1,10 +1,11 @@
 from decimal import Decimal
 from typing import Optional
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, or_, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Inventory
+from models import Inventory, AccessRequest
 
 import logging, re
 
@@ -203,6 +204,65 @@ async def deduct_stock(db: AsyncSession,items: list[dict]) -> dict:
         await db.rollback()
         logger.exception("deduct_stock failed")
         return {"success": False, "message": "Database error during stock deduction"}
+    
+
+
+
+# ------------ Access Request ------------------ #
+
+async def get_access_request(db: AsyncSession, request_id: str) -> Optional[AccessRequest]:
+    result = await db.execute(select(AccessRequest).where(AccessRequest.id==request_id))
+    return result.scalar_one_or_none()
+
+async def get_latest_request_by_phone(db: AsyncSession, phone_number: str) -> Optional[AccessRequest]:
+    result = await db.execute(select(AccessRequest).where(AccessRequest.phone_number==phone_number).order_by(AccessRequest.created_at.desc()).limit(1))
+
+    return result.scalar_one_or_none()
+
+async def create_access_request(db: AsyncSession, phone_number: str) -> AccessRequest:
+    item = AccessRequest(phone_number=phone_number, status="pending")
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+async def set_request_status(db: AsyncSession, request_id: str, status: str, responded_at: Optional[datetime] = None) -> Optional[AccessRequest]:
+    stmt = update(AccessRequest).where(AccessRequest.id==request_id).values(status=status, responded_at=responded_at)
+
+    result = await db.execute(stmt)
+    await db.commit()
+    if result.rowcount == 0:
+        return None
+    return await get_access_request(db, request_id)
+
+async def consume_approved_request(db: AsyncSession, request_id: str) -> Optional[AccessRequest]:
+    """Atomically flip an approved request to 'consumed'. Returns None if not approved anymore."""
+
+    stmt = update(AccessRequest).where(AccessRequest.id==request_id, AccessRequest.status=='approved').values(status='consumed', responded_at=datetime.now(timezone.utc))
+
+    result = await db.execute(stmt)
+
+    await db.commit()
+
+    if result.rowcount == 0:
+        return None
+
+    return await get_access_request(db, request_id)
+
+async def list_access_requests(db: AsyncSession) -> list[AccessRequest]:
+    result = await db.execute(select(AccessRequest).order_by(AccessRequest.created_at.desc()))
+    return list(result.scalars().all())
+
+def access_request_to_dict(record: AccessRequest) -> dict:
+    return {
+        "id": record.id,
+        "phone_number": record.phone_number,
+        "status": record.status,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "responded_at": record.responded_at.isoformat() if record.responded_at else None,
+    }
+
+
 
 
 

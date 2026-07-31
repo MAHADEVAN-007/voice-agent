@@ -1,13 +1,27 @@
 import os, json, uuid, uvicorn, logging, random, string, time, asyncio
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel
 
+from contextlib import asynccontextmanager
+
 from livekit.api import LiveKitAPI, CreateAgentDispatchRequest, CreateSIPParticipantRequest, DeleteRoomRequest
+
+from database import init_db, session_scope
+
+from crud import (
+    get_access_request,
+    get_latest_request_by_phone,
+    create_access_request,
+    set_request_status,
+    consume_approved_request,
+    list_access_requests,
+    access_request_to_dict,
+)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -25,7 +39,18 @@ logger = logging.getLogger(__name__)
 import aiohttp
 from aiohttp.resolver import AsyncResolver
 
-app = FastAPI(title="VocalKart")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        await init_db()
+    except Exception as e:
+        logger.exception(f"init_db failed at startup: {e}")
+    yield
+
+app = FastAPI(title="VocalKart", lifespan=lifespan)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,7 +64,7 @@ LIVEKIT_API_KEY = os.environ['LIVEKIT_API_KEY']
 LIVEKIT_API_SECRET = os.environ['LIVEKIT_API_SECRET']
 LIVEKIT_OUTBOUND_TRUNK_ID = os.environ['LIVEKIT_OUTBOUND_TRUNK_ID']
 TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY")
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "vocalKart-admin-secret-2492")
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 
 
 class CreateSessionBody(BaseModel):
@@ -60,6 +85,7 @@ class RequestAccessBody(BaseModel):
 class AdminRespondBody(BaseModel):
     request_id: str
     action: str
+    secret: str = ""
 
 
 def generate_otp() -> str:
@@ -129,15 +155,19 @@ async def create_session(body: CreateSessionBody, request: Request):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification failed. Please refresh and try again.")
 
     # ____ Approval Guard ______
-    request_id = phone_request_index.get(body.phone_number)
-    if not request_id or request_id not in access_requests:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied. Please request approval first.")
+    async with session_scope() as db:
+        approval_request = await get_latest_request_by_phone(db, body.phone_number)
 
-    if access_requests[request_id]["status"] != "approved":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Approval Pending. Please wait for admin approval")
+        if not approval_request:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail = "Access Denied. Please request approval first")
 
-    del access_requests[request_id]
-    del phone_request_index[body.phone_number]
+        if approval_request.status != 'approved':
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Approval Pending. Please wait for admin aprroval.')
+
+        consumed = await consume_approved_request(db, approval_request.id)
+
+        if not consumed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Approval already used. Please request a new approval.')
 
 
     client_ip = get_client_ip(request)
@@ -184,38 +214,18 @@ async def create_session(body: CreateSessionBody, request: Request):
     }
 
 
-access_requests: dict[str, dict] = {}
-phone_request_index: dict[str, str] = {}
-
-app.state.access_requests = access_requests
-
 @app.post("/api/request-access")
 async def request_access(body: RequestAccessBody, request: Request):
     if not body.phone_number:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone Number Required")
 
-    existing_id = phone_request_index.get(body.phone_number)
-    if existing_id and existing_id in access_requests:
-        existing = access_requests[existing_id]
-
-        if existing['status'] == "pending":
-            return {"request_id": existing_id, "status":"pending"}
-
-        del access_requests[existing_id]
-        del phone_request_index[body.phone_number]
-
-    request_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
-    record = {
-        "id": request_id,
-        "phone_number": body.phone_number,
-        "status": "pending",
-        "created_at": now.isoformat(),
-        "responded_at": None,
-    }
-
-    access_requests[request_id] = record
-    phone_request_index[body.phone_number] = request_id
+    async with session_scope() as db:
+        existing = await get_latest_request_by_phone(db, body.phone_number)
+        if existing and existing.status == 'pending':
+            request_id = existing.id
+        else:
+            new_record = await create_access_request(db, body.phone_number)
+            request_id = new_record.id
 
     try:
         public_url = os.environ.get("PUBLIC_URL", "").rstrip("/")
@@ -237,43 +247,61 @@ async def request_access(body: RequestAccessBody, request: Request):
 
 @app.get("/api/request-status/{request_id}")
 async def get_request_status(request_id: str):
-    record = access_requests.get(request_id)
+    async with session_scope() as db:
+        record = await get_access_request(db, request_id)
+
     if not record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request NOT Found")
-    else:
-        return {
-            "status": record['status'],
-            "request_id": record['id'],
-            "created_at": record['created_at'],
-            "responded_at": record['responded_at'],
-        }
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Request NOT Found')
+
+    return{
+        "status": record.status,
+        "request_id": record.id,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "responded_at": record.responded_at.isoformat() if record.responded_at else None,
+    }
 
 
 @app.get("/api/admin/list-requests")
-async def list_requests(request_id: str = ""):
-    record = access_requests.get(request_id)
-    if not record:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired request")
-    return {"requests": [record]}
+async def list_requests(secret: str = Header(default="", alias="X-Admin-Secret"), secret_query: str = Query(default="")):
+
+    secret = secret or secret_query
+
+    if not ADMIN_SECRET:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Admin Secret NOT Configured.')
+
+    if secret != ADMIN_SECRET:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid or Expired Request')
+
+    async with session_scope() as db:
+        records = await list_access_requests(db)
+
+    return {
+        "requests": [access_request_to_dict(r) for r in records]
+    }
+    
 
 @app.post("/api/admin/respond-request")
 async def admin_respond(body: AdminRespondBody):
-    record = access_requests.get(body.request_id)
 
-    if not record or record['status'] != 'pending':
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired request")
+    if not ADMIN_SECRET:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin secret not configured")
 
-    if body.action not in ("approved", "rejected"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Action must be 'approved' or 'rejected'")
+    if body.secret != ADMIN_SECRET:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid or Expired Request')
 
-    record = access_requests.get(body.request_id)
-    if not record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request NOT Found")
-    if record['status'] != 'pending':
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Request already {record['status']}")
+    if body.action not in ('approved', 'rejected'):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Action must be 'approved' or 'rejected'.")
 
-    record['status'] = body.action
-    record['responded_at'] = datetime.now(timezone.utc).isoformat()
+    async with session_scope() as db:
+        record = await get_access_request(db, body.request_id)
+
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Request NOT Found.')
+
+        if record.status != 'pending':
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Request already {record.status}")
+
+        await set_request_status(db, body.request_id, body.action, responded_at=datetime.now(timezone.utc))
 
     return {
         "status": body.action,

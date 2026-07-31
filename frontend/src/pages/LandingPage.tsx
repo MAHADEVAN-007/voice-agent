@@ -107,6 +107,7 @@ export default function LandingPage() {
       setTurnstileToken(null);
       setOtpStep("otp");
       setOtpCountdown(30);
+      setOtpError("");
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : "Failed to send OTP");
     } finally {
@@ -116,6 +117,10 @@ export default function LandingPage() {
 
   const handleVerifyOTP = async () => {
     if (!phoneNumber || otpInput.length < 6) return;
+    if (otpCountdown === 0) {
+      setOtpError("OTP expired. Please request a new OTP.");
+      return;
+    }
     setOtpError("");
     try {
       const res = await fetch("/api/verify-otp", {
@@ -487,8 +492,8 @@ export default function LandingPage() {
 
                     <button
                       onClick={handleVerifyOTP}
-                      disabled={otpInput.length < 6}
-                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${otpInput.length < 6 ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
+                      disabled={otpInput.length < 6 || otpCountdown === 0}
+                      className={`group relative text-white font-semibold px-8 py-3.5 rounded-xl text-lg transition-all w-full flex items-center justify-center gap-2 overflow-hidden ${otpInput.length < 6 || otpCountdown === 0 ? "bg-neutral-700 cursor-not-allowed" : "bg-gradient-to-r from-blue-400 to-purple-400 hover:brightness-110"}`}
                     >
                       Verify OTP
                     </button>

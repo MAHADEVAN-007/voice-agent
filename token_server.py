@@ -126,12 +126,12 @@ async def verify_otp(body: VerifyOTPBody):
 
     # No OTP requested ->
     if not entry:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No OTP requested. Click Send OTP first.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OTP expired or not requested. Please request a new OTP.")
 
     # If time exceeds then 30 seconds, OTP expires ->
     if time.time() > entry["expires"]:
         del otp_store[body.phone_number]
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OTP Expired. Request a new OTP.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OTP expired. Please request a new OTP.")
 
     # If entered_otp != otp ->
     if entry['otp_code'] != body.otp:

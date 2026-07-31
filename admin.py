@@ -22,12 +22,21 @@ ADMIN_HTML = """<!DOCTYPE html>
   .card .phone{font-size:16px;font-weight:600}
   .card .time{color:#737373;font-size:13px}
   .card .actions{display:flex;gap:8px}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-left:6px}
+  .badge-pending{background:#854d0e;color:#fde047}
+  .badge-approved{background:#14532d;color:#4ade80}
+  .badge-rejected{background:#7f1d1d;color:#f87171}
+  .badge-consumed{background:#1e293b;color:#94a3b8}
   .btn{color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
   .btn:hover{opacity:.8}
   .btn-approve{background:#16a34a}
   .btn-reject{background:#dc2626}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
   .empty{text-align:center;padding:60px 20px;color:#525252}
   .empty h2{font-size:20px;margin-bottom:6px;color:#a3a3a3}
+  .center{text-align:center;padding:60px 20px;color:#a3a3a3}
+  .center h2{font-size:20px;margin-bottom:6px}
+  .center a{color:#60a5fa}
   .toast{position:fixed;bottom:20px;right:20px;background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:12px 20px;font-size:14px;opacity:0;transition:opacity .3s}
   .toast.show{opacity:1}
   #login{max-width:360px;margin:80px auto;background:#1a1a1a;border:1px solid #262626;border-radius:12px;padding:24px;text-align:center}
@@ -37,7 +46,7 @@ ADMIN_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <h1>VocalKart Admin</h1>
-<p class="sub">Pending access requests</p>
+<p class="sub">Access requests</p>
 <div id="login">
   <input type="password" id="secret" placeholder="Admin secret" autocomplete="off">
   <button onclick="login()">Login</button>
@@ -61,6 +70,60 @@ function showToast(msg,ok){
   TOAST.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>TOAST.classList.remove('show'),3000);
+}
+
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+function renderCard(r){
+  const t=new Date(r.created_at).toLocaleString();
+  const badge='<span class="badge badge-'+r.status+'">'+r.status+'</span>';
+  const actions=(r.status==='pending')?
+    '<div class="actions">'+
+      '<button class="btn btn-approve" onclick="respond(\\''+r.id+'\\',\\'approved\\',this)">Approve</button>'+
+      '<button class="btn btn-reject" onclick="respond(\\''+r.id+'\\',\\'rejected\\',this)">Reject</button>'+
+    '</div>':'';
+  return '<div class="card" data-id="'+r.id+'">'+
+    '<div><div class="phone">'+esc(r.phone_number)+badge+'</div><div class="time">'+t+'</div></div>'+
+    actions+'</div>';
+}
+
+async function respond(id,action,btn){
+  if(btn) btn.disabled=true;
+  try{
+    const r=await fetch('/api/admin/respond-request',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({request_id:id, action, secret:SECRET})
+    });
+    if(r.ok){
+      showToast(action==='approved'?'Approved ✓':'Rejected ✗',true);
+      if(REQUEST_ID){loadSingle();}else{load();}
+    }else{
+      const e=await r.json();
+      showToast('Error: '+(e.detail||r.status),false);
+      if(btn) btn.disabled=false;
+    }
+  }catch(e){
+    showToast('Network error',false);
+    if(btn) btn.disabled=false;
+  }
+}
+
+async function loadSingle(){
+  try{
+    const r=await fetch('/api/request-status/'+encodeURIComponent(REQUEST_ID));
+    const d=await r.json();
+    if(d.status==='pending'){
+      STATUS.textContent='1 pending';
+      DIV.innerHTML=renderCard(d);
+    }else{
+      STATUS.textContent='Request '+d.status;
+      DIV.innerHTML='<div class="center"><h2>Request '+d.status+'</h2>'+
+        '<p>'+esc(d.phone_number||'')+'</p>'+
+        (d.status==='approved'?'<p><a href="/">Go to VocalKart</a></p>':'')+'</div>';
+    }
+  }catch(e){
+    STATUS.textContent='Network error';
+  }
 }
 
 async function login(){
@@ -89,52 +152,24 @@ async function load(){
     const r=await fetch('/api/admin/list-requests',{headers:{'X-Admin-Secret':SECRET}});
     if(!r.ok){STATUS.textContent='Auth error';return}
     const data=await r.json();
-    const pending=data.requests.filter(r=>r.status==='pending');
-    if(!pending.length){
-      DIV.innerHTML='<div class="empty"><h2>No pending requests</h2><p>All caught up!</p></div>';
-      STATUS.textContent='0 pending';
+    const requests=data.requests;
+    if(!requests.length){
+      DIV.innerHTML='<div class="empty"><h2>No requests yet</h2><p>All caught up!</p></div>';
+      STATUS.textContent='0 requests';
       return;
     }
-    STATUS.textContent=pending.length+' pending';
-    DIV.innerHTML=pending.map(r=>{
-      const t=new Date(r.created_at).toLocaleString();
-      return '<div class="card" data-id="'+r.id+'">'+
-        '<div><div class="phone">'+esc(r.phone_number)+'</div><div class="time">'+t+'</div></div>'+
-        '<div class="actions">'+
-          '<button class="btn btn-approve" onclick="respond(\\''+r.id+'\\',\\'approved\\')">Approve</button>'+
-          '<button class="btn btn-reject" onclick="respond(\\''+r.id+'\\',\\'rejected\\')">Reject</button>'+
-        '</div></div>';
-    }).join('');
+    const pending=requests.filter(x=>x.status==='pending').length;
+    STATUS.textContent=pending+' pending · '+requests.length+' total';
+    DIV.innerHTML=requests.map(renderCard).join('');
   }catch(e){
     STATUS.textContent='Network error';
   }
 }
 
-function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
-
-async function respond(id,action){
-  try{
-    const r=await fetch('/api/admin/respond-request',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({request_id:id, action, secret:SECRET})
-    });
-    if(r.ok){
-      showToast(action==='approved'?'Approved ✓':'Rejected ✗',true);
-      load();
-    }else{
-      const e=await r.json();
-      showToast('Error: '+(e.detail||r.status),false);
-    }
-  }catch(e){
-    showToast('Network error',false);
-  }
-}
-
 if(REQUEST_ID){
-  fetch('/api/request-status/'+encodeURIComponent(REQUEST_ID))
-    .then(r=>r.json())
-    .then(d=>{if(d.status==='approved'){window.location.href='/'}})
-    .catch(()=>{});
+  document.getElementById('login').style.display='none';
+  document.getElementById('panel').style.display='block';
+  loadSingle();
 }
 </script>
 </body>

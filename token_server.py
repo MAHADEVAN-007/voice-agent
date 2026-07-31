@@ -256,6 +256,7 @@ async def get_request_status(request_id: str):
     return{
         "status": record.status,
         "request_id": record.id,
+        "phone_number": record.phone_number,
         "created_at": record.created_at.isoformat() if record.created_at else None,
         "responded_at": record.responded_at.isoformat() if record.responded_at else None,
     }
@@ -283,11 +284,12 @@ async def list_requests(secret: str = Header(default="", alias="X-Admin-Secret")
 @app.post("/api/admin/respond-request")
 async def admin_respond(body: AdminRespondBody):
 
-    if not ADMIN_SECRET:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin secret not configured")
+    if body.secret:
+        if not ADMIN_SECRET:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin secret not configured")
 
-    if body.secret != ADMIN_SECRET:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid or Expired Request')
+        if body.secret != ADMIN_SECRET:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid or Expired Request')
 
     if body.action not in ('approved', 'rejected'):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Action must be 'approved' or 'rejected'.")

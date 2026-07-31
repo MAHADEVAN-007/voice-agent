@@ -108,7 +108,7 @@ async def send_otp(body: SendOTPBody):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification failed. Please refresh and try again.")
 
     otp_code = generate_otp()
-    otp_store[body.phone_number] = {"otp_code":otp_code, "expires":time.time()+60}
+    otp_store[body.phone_number] = {"otp_code":otp_code, "expires":time.time()+30}
 
     if not callable(send_otp_sms):
         raise HTTPException(status_code=503, detail="SMS service unavailable")
@@ -128,7 +128,7 @@ async def verify_otp(body: VerifyOTPBody):
     if not entry:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No OTP requested. Click Send OTP first.")
 
-    # If time exceeds then 1 min, OTP expires ->
+    # If time exceeds then 30 seconds, OTP expires ->
     if time.time() > entry["expires"]:
         del otp_store[body.phone_number]
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OTP Expired. Request a new OTP.")

@@ -10,7 +10,7 @@ def send_otp_sms(phone_number: str, otp_code: str) -> bool:
         client.messages.create(
             from_=os.environ['TWILIO_MOBILE_NUMBER'],
             to=phone_number,
-            body=f"VocalKart OTP : {otp_code}. Valid for 1 minute. Do NOT Share."
+            body=f"VocalKart OTP : {otp_code}. Valid for 30 seconds. Do NOT Share."
         )
         logger.info(f"OTP sent to {phone_number}")
         return True

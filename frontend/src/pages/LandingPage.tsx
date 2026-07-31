@@ -106,7 +106,7 @@ export default function LandingPage() {
       turnstileRef.current?.reset();
       setTurnstileToken(null);
       setOtpStep("otp");
-      setOtpCountdown(60);
+      setOtpCountdown(30);
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : "Failed to send OTP");
     } finally {
@@ -497,7 +497,7 @@ export default function LandingPage() {
                       {otpCountdown > 0 ? (
                         <span className="text-neutral-500">Expires in {otpCountdown}s</span>
                       ) : (
-                        <button onClick={() => { setOtpCountdown(60); handleSendOTP(); }} className="text-blue-400 hover:text-blue-300 transition-colors">
+                        <button onClick={() => { setOtpCountdown(30); handleSendOTP(); }} className="text-blue-400 hover:text-blue-300 transition-colors">
                           Resend OTP
                         </button>
                       )}

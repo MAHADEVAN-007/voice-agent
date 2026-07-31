@@ -254,6 +254,7 @@ async def get_request_status(request_id: str):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Request NOT Found')
 
     return{
+        "id": record.id,
         "status": record.status,
         "request_id": record.id,
         "phone_number": record.phone_number,
